@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>비투스의 키워드 세상</title>
+<meta name="description" content="유튜브·네이버·구글 키워드를 매일 모아 보여주는 블로그·콘텐츠 주제 발굴 도구">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌏</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f6f7fb; --surface:#fff; --surface-2:#f1f3f8; --line:#e4e7ef;
+  --text:#161a23; --muted:#667085; --accent:#5b5bf0; --accent-soft:#ececff;
+  --google:#1a73e8; --youtube:#e62117; --naver:#03a94d; --hot:#ff5a36; --warn:#b7791f;
+  --shadow:0 1px 2px rgba(16,24,40,.05),0 4px 16px rgba(16,24,40,.04);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0e1015; --surface:#171a21; --surface-2:#1f232c; --line:#2a2f3a;
+  --text:#eef0f5; --muted:#98a1b3; --accent:#8b8bff; --accent-soft:#25264a;
+  --google:#6ea8ff; --youtube:#ff5a52; --naver:#2fd27a; --hot:#ff7a5c; --warn:#e0a84a;
+  --shadow:none;
+}}
+:root[data-theme="dark"]{
+  --bg:#0e1015; --surface:#171a21; --surface-2:#1f232c; --line:#2a2f3a;
+  --text:#eef0f5; --muted:#98a1b3; --accent:#8b8bff; --accent-soft:#25264a;
+  --google:#6ea8ff; --youtube:#ff5a52; --naver:#2fd27a; --hot:#ff7a5c; --warn:#e0a84a;
+  --shadow:none;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:'Noto Sans KR',system-ui,sans-serif;font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+a{color:inherit}
+.wrap{max-width:1120px;margin:0 auto;padding:0 16px 80px}
+header{padding:32px 0 20px;display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;justify-content:space-between}
+h1{margin:0;font-size:28px;font-weight:900;letter-spacing:-.02em}
+h1 span{color:var(--accent)}
+.sub{color:var(--muted);font-size:14px;margin-top:4px}
+.controls{display:flex;gap:8px;flex-wrap:wrap}
+select,input[type=search]{font:inherit;color:var(--text);background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:9px 12px}
+input[type=search]{width:220px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:24px}
+.status{font-size:12px;padding:4px 10px;border-radius:99px;background:var(--surface);border:1px solid var(--line);color:var(--muted)}
+.status.on{color:var(--text)}
+.status.on::before{content:"●";margin-right:5px;color:var(--naver)}
+.status.off::before{content:"○";margin-right:5px}
+section{margin-bottom:36px}
+.sec-h{display:flex;align-items:baseline;gap:10px;margin:0 0 12px}
+.sec-h h2{margin:0;font-size:19px;font-weight:700}
+.sec-h .hint{color:var(--muted);font-size:13px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow)}
+.trend-list{display:grid;gap:8px}
+.trend{padding:14px 16px;cursor:pointer}
+.trend-top{display:flex;align-items:center;gap:12px}
+.rank{width:26px;font-weight:900;color:var(--muted);text-align:center;flex:none}
+.trend:nth-child(-n+3) .rank{color:var(--hot)}
+.kw{font-weight:700;font-size:16px}
+.badge{font-size:11px;font-weight:700;padding:2px 7px;border-radius:6px;white-space:nowrap}
+.b-new{background:color-mix(in srgb,var(--hot) 15%,transparent);color:var(--hot)}
+.b-streak{background:var(--accent-soft);color:var(--accent)}
+.traffic{margin-left:auto;color:var(--muted);font-size:13px;white-space:nowrap}
+.vol{font-size:12px;color:var(--naver);white-space:nowrap}
+.news{color:var(--muted);font-size:13px;margin:4px 0 0 38px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.detail{display:none;margin:12px 0 2px 38px}
+.trend.open .detail{display:block}
+.cols{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.col h4{margin:0 0 6px;font-size:12px;font-weight:700}
+.col.g h4{color:var(--google)} .col.y h4{color:var(--youtube)} .col.n h4{color:var(--naver)}
+.tags{display:flex;flex-wrap:wrap;gap:5px}
+.tag{font:inherit;font-size:13px;padding:4px 9px;border-radius:8px;background:var(--surface-2);border:1px solid transparent;color:var(--text);cursor:pointer}
+.tag:hover{border-color:var(--accent);color:var(--accent)}
+.tag small{color:var(--muted);margin-left:3px}
+.newslinks{margin-top:10px;font-size:13px}
+.newslinks a{display:block;color:var(--muted);text-decoration:none;padding:2px 0}
+.newslinks a:hover{color:var(--accent)}
+.spark{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12px;color:var(--muted)}
+.empty{padding:22px;color:var(--muted);font-size:14px}
+.empty b{color:var(--text)}
+.seed-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:10px}
+.seed{padding:14px 16px}
+.seed .kw{display:block;margin-bottom:8px}
+.yt-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin-top:12px}
+.yt{display:flex;gap:10px;padding:10px;text-decoration:none}
+.yt img{width:96px;height:54px;object-fit:cover;border-radius:6px;flex:none;background:var(--surface-2)}
+.yt .t{font-size:13px;font-weight:500;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.yt .c{font-size:12px;color:var(--muted)}
+.soon{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
+.soon .card{padding:14px 16px;font-size:13px;color:var(--muted)}
+.soon b{display:block;color:var(--text);font-size:15px;margin-bottom:4px}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);opacity:0;background:var(--text);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px;transition:.2s;pointer-events:none}
+.toast.show{opacity:1;transform:translateX(-50%)}
+footer{color:var(--muted);font-size:12px;text-align:center;margin-top:40px}
+@media (max-width:720px){
+  h1{font-size:23px} input[type=search]{width:100%} .controls{width:100%} .controls>*{flex:1}
+  .cols{grid-template-columns:1fr} .detail,.news{margin-left:0} .traffic{display:none}
+  .seed-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>비투스의 <span>키워드 세상</span> 🌏</h1>
+      <div class="sub" id="sub">불러오는 중…</div>
+    </div>
+    <div class="controls">
+      <input type="search" id="q" placeholder="키워드 검색">
+      <select id="date" aria-label="날짜 선택"></select>
+    </div>
+  </header>
+  <div class="chips" id="status"></div>
+
+  <section>
+    <div class="sec-h"><h2>🔥 오늘의 급상승 검색어</h2><span class="hint">구글 기준 · 누르면 플랫폼별 연관 검색어</span></div>
+    <div class="trend-list" id="trends"></div>
+  </section>
+
+  <section>
+    <div class="sec-h"><h2>▶️ 유튜브 인기 키워드</h2><span class="hint">한국 인기 동영상 태그 집계</span></div>
+    <div id="youtube"></div>
+  </section>
+
+  <section>
+    <div class="sec-h"><h2>📌 우리 팀 관심 키워드</h2><span class="hint">매일 바뀌는 연관 검색어로 글감 찾기</span></div>
+    <div class="seed-grid" id="seeds"></div>
+  </section>
+
+  <section>
+    <div class="sec-h"><h2>🛠 곧 추가될 플랫폼</h2></div>
+    <div class="soon">
+      <div class="card"><b>틱톡</b>공식 트렌드 API가 없어 Creative Center 데이터 연동 방식을 검토 중이에요.</div>
+      <div class="card"><b>인스타그램</b>Meta 앱 심사 후 지정한 해시태그의 인기 게시물을 볼 수 있어요.</div>
+      <div class="card"><b>스레드</b>Meta 앱 심사 후 키워드별 언급량을 볼 수 있어요.</div>
+    </div>
+  </section>
+
+  <footer>키워드를 누르면 복사돼요 · 데이터는 3시간마다 갱신</footer>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s = '') => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+let data = null;
+
+function toast(msg) {
+  const t = $('#toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('show'), 1400);
+}
+document.addEventListener('click', (e) => {
+  const tag = e.target.closest('[data-copy]');
+  if (tag) {
+    e.stopPropagation();
+    navigator.clipboard?.writeText(tag.dataset.copy).then(() => toast(`"${tag.dataset.copy}" 복사됨`));
+    return;
+  }
+  const tr = e.target.closest('.trend');
+  if (tr && !e.target.closest('a')) tr.classList.toggle('open');
+});
+
+const fmt = (n) => n >= 10000 ? (n / 10000).toFixed(n >= 100000 ? 0 : 1) + '만' : n.toLocaleString();
+const tagBtn = (k, extra = '') => `<button class="tag" data-copy="${esc(k)}">${esc(k)}${extra}</button>`;
+
+function volumeOf(k) {
+  const v = data.naver?.searchad?.[k.replace(/\s+/g, '')];
+  return v ? v.pc + v.mobile : null;
+}
+function spark(arr) {
+  if (!arr?.length) return '';
+  const w = 160, h = 28, max = Math.max(...arr, 1);
+  const pts = arr.map((v, i) => `${(i / (arr.length - 1)) * w},${h - (v / max) * h}`).join(' ');
+  return `<div class="spark">네이버 30일 추이 <svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h + 2}"><polyline fill="none" stroke="var(--naver)" stroke-width="1.6" points="${pts}"/></svg></div>`;
+}
+function suggestCols(k) {
+  const s = data.suggestions?.[k];
+  if (!s) return '<div class="hint">연관 검색어 없음</div>';
+  const col = (cls, name, list) => `<div class="col ${cls}"><h4>${name}</h4><div class="tags">${
+    list?.length ? list.map((x) => tagBtn(x)).join('') : '<span class="hint">없음</span>'}</div></div>`;
+  return `<div class="cols">${col('g', '구글', s.google)}${col('y', '유튜브', s.youtube)}${col('n', '네이버', s.naver)}</div>`;
+}
+const match = (k, q) => !q || k.toLowerCase().includes(q) ||
+  Object.values(data.suggestions?.[k] || {}).flat().some((x) => x.toLowerCase().includes(q));
+
+function render() {
+  const q = $('#q').value.trim().toLowerCase();
+  const S = data.sources || {};
+  $('#sub').textContent = `${data.date} · ${new Date(data.generatedAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} 업데이트`;
+  const chip = (on, label) => `<span class="status ${on ? 'on' : 'off'}">${label}</span>`;
+  $('#status').innerHTML = [
+    chip(S.google, '구글 급상승'), chip(true, '연관 검색어 (구글·유튜브·네이버)'),
+    chip(S.youtube, '유튜브 인기'), chip(S.naverSearchAd, '네이버 검색량'), chip(S.naverDatalab, '네이버 추이'),
+    chip(false, '틱톡'), chip(false, '인스타'), chip(false, '스레드'),
+  ].join('');
+
+  const trends = (data.google || []).filter((t) => match(t.keyword, q));
+  $('#trends').innerHTML = trends.length ? trends.map((t, i) => {
+    const vol = volumeOf(t.keyword);
+    return `<div class="card trend">
+      <div class="trend-top">
+        <span class="rank">${i + 1}</span>
+        <span class="kw">${esc(t.keyword)}</span>
+        ${t.isNew ? '<span class="badge b-new">NEW</span>' : `<span class="badge b-streak">${t.streak}일째</span>`}
+        ${vol != null ? `<span class="vol">월 ${fmt(vol)}회</span>` : ''}
+        <span class="traffic">검색 ${esc(t.traffic)}</span>
+      </div>
+      ${t.news?.[0] ? `<div class="news">${esc(t.news[0].title)}</div>` : ''}
+      <div class="detail">
+        ${suggestCols(t.keyword)}
+        ${spark(data.naver?.datalab?.[t.keyword])}
+        ${t.news?.length ? `<div class="newslinks">${t.news.map((n) => `<a href="${esc(n.url)}" target="_blank" rel="noopener">📰 ${esc(n.title)} <small>· ${esc(n.source)}</small></a>`).join('')}</div>` : ''}
+      </div>
+    </div>`;
+  }).join('') : `<div class="card empty">${q ? '검색 결과가 없어요.' : '아직 수집된 급상승 검색어가 없어요.'}</div>`;
+
+  const yt = data.youtube;
+  $('#youtube').innerHTML = yt ? `
+    <div class="card" style="padding:14px 16px"><div class="tags">${yt.keywords.filter((k) => match(k.keyword, q)).map((k) => tagBtn(k.keyword, `<small>${k.count}</small>`)).join('')}</div></div>
+    <div class="yt-grid">${yt.videos.filter((v) => !q || v.title.toLowerCase().includes(q) || v.tags.some((t) => t.toLowerCase().includes(q))).slice(0, 12).map((v) => `
+      <a class="card yt" href="https://youtu.be/${v.id}" target="_blank" rel="noopener">
+        <img src="${esc(v.thumb)}" alt="" loading="lazy"><div><div class="t">${esc(v.title)}</div><div class="c">${esc(v.channel)} · 조회 ${fmt(v.views)}</div></div>
+      </a>`).join('')}</div>`
+    : `<div class="card empty"><b>유튜브 API 키를 연결하면 열려요.</b> 지금은 위 급상승 키워드마다 유튜브 연관 검색어를 보여 드려요.</div>`;
+
+  const seeds = (data.seeds || []).filter((k) => match(k, q));
+  $('#seeds').innerHTML = seeds.length ? seeds.map((k) => {
+    const vol = volumeOf(k);
+    return `<div class="card seed"><span class="kw">${esc(k)} ${vol != null ? `<span class="vol">월 ${fmt(vol)}회</span>` : ''}</span>${suggestCols(k)}</div>`;
+  }).join('') : '<div class="card empty">해당하는 관심 키워드가 없어요.</div>';
+}
+
+async function load(date) {
+  const url = date ? `data/history/${date}.json` : 'data/latest.json';
+  data = await (await fetch(url, { cache: 'no-cache' })).json();
+  render();
+}
+
+(async () => {
+  try {
+    const { dates } = await (await fetch('data/index.json', { cache: 'no-cache' })).json();
+    $('#date').innerHTML = dates.slice().reverse().map((d, i) => `<option value="${i ? d : ''}">${d}${i ? '' : ' (오늘)'}</option>`).join('');
+    await load('');
+  } catch (e) {
+    $('#sub').textContent = '데이터를 불러오지 못했어요.';
+  }
+  $('#date').onchange = (e) => load(e.target.value);
+  $('#q').oninput = () => data && render();
+})();
+</script>
+</body>
+</html>
