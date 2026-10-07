@@ -98,8 +98,9 @@ async function suggestAll(q) {
 }
 
 // ── 유튜브 인기 동영상 (키 필요) — 전체 + 분야별 ──────────────────
-const YT_CATS = { 0: '전체', 10: '음악', 24: '엔터테인먼트', 20: '게임', 17: '스포츠', 25: '뉴스/정치',
-  26: '노하우/스타일', 22: '인물/블로그', 23: '코미디', 1: '영화/애니', 28: '과학기술', 15: '동물' };
+// 객체 키가 숫자면 순서가 바뀌므로 배열로 둔다
+const YT_CATS = [['0', '전체'], ['24', '엔터테인먼트'], ['10', '음악'], ['26', '노하우/스타일'], ['22', '인물/블로그'],
+  ['25', '뉴스/정치'], ['17', '스포츠'], ['20', '게임'], ['23', '코미디'], ['1', '영화/애니'], ['28', '과학기술'], ['15', '동물']];
 // 제목에서 키워드 후보: 해시태그, [대괄호], '따옴표' 속 말
 function titleTerms(title) {
   const out = [];
@@ -112,7 +113,7 @@ async function youtubeTrending() {
   if (!env.YOUTUBE_API_KEY) return null;
   const categories = [];
   const seen = new Map();
-  for (const [cid, name] of Object.entries(YT_CATS)) {
+  for (const [cid, name] of YT_CATS) {
     const u = `https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics&chart=mostPopular&regionCode=KR&maxResults=${cid === '0' ? 50 : 20}${cid === '0' ? '' : `&videoCategoryId=${cid}`}&key=${env.YOUTUBE_API_KEY}`;
     let items;
     try { items = (await (await get(u)).json()).items || []; } catch { continue; } // 한국에 없는 분야는 건너뜀
