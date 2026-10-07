@@ -1,7 +1,7 @@
 {
   "cleanUrls": true,
   "rewrites": [
-    { "source": "/:page(google|naver|youtube|tiktok|instagram|threads)", "destination": "/index.html" }
+    { "source": "/:page(google|naver|youtube|tiktok|instagram|threads)", "destination": "/" }
   ],
   "headers": [{ "source": "/data/(.*)", "headers": [{ "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }] }]
 }
