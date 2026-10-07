@@ -161,7 +161,8 @@ function datalabEndpoint() {
 async function naverDatalab(keywords) {
   const ep = datalabEndpoint();
   if (!ep) return null;
-  const end = new Date(Date.now() + 9 * 3600e3);
+  // 데이터랩은 어제까지만 집계되므로 어제를 끝으로 31일
+  const end = new Date(Date.now() + 9 * 3600e3 - 86400e3);
   const start = new Date(end - 30 * 86400e3);
   const out = {};
   for (let i = 0; i < keywords.length; i += 5) {
@@ -177,10 +178,48 @@ async function naverDatalab(keywords) {
           keywordGroups: group.map((k) => ({ groupName: k, keywords: [k] })),
         }),
       });
-      for (const r of (await res.json()).results) out[r.title] = r.data.map((d) => d.ratio);
+      for (const r of (await res.json()).results) out[r.title] = r.data.map((d) => Math.round(d.ratio * 10) / 10);
     } catch (e) { console.warn('datalab', e.message); }
   }
   return out;
+}
+
+// ── 네이버 블로그 글 수 (키 필요) — 글이 적을수록 블로그로 노리기 쉬움 ──
+async function naverBlogCount(keywords) {
+  let url, headers;
+  if (env.NAVER_HUB_KEY_ID && env.NAVER_HUB_KEY) {
+    url = 'https://naverapihub.apigw.ntruss.com/search/v1/blog';
+    headers = { 'X-NCP-APIGW-API-KEY-ID': env.NAVER_HUB_KEY_ID, 'X-NCP-APIGW-API-KEY': env.NAVER_HUB_KEY };
+  } else if (env.NAVER_CLIENT_ID && env.NAVER_CLIENT_SECRET) {
+    url = 'https://openapi.naver.com/v1/search/blog.json';
+    headers = { 'X-Naver-Client-Id': env.NAVER_CLIENT_ID, 'X-Naver-Client-Secret': env.NAVER_CLIENT_SECRET };
+  } else return null;
+  const out = {};
+  for (const k of keywords) {
+    try {
+      const j = await (await get(`${url}?query=${encodeURIComponent(k)}&display=1&format=json`, { headers })).json();
+      if (typeof j.total === 'number') out[k] = j.total;
+    } catch (e) { console.warn('blog', k, e.message); }
+    await sleep(60);
+  }
+  return out;
+}
+
+// 데이터랩 추이에서 급상승 찾기: 최근 3일 평균 ÷ 그 전 평균 (키워드마다 자기 최댓값으로 정규화)
+function findRising(datalab) {
+  const avg = (a) => a.reduce((x, y) => x + y, 0) / (a.length || 1);
+  const out = [];
+  for (const [keyword, raw] of Object.entries(datalab || {})) {
+    if (!raw || raw.length < 14) continue;
+    const max = Math.max(...raw);
+    if (max <= 0) continue;
+    const arr = raw.map((v) => (v / max) * 100);
+    const recent = avg(arr.slice(-3));
+    const base = avg(arr.slice(0, -3));
+    const score = recent / Math.max(base, 5);
+    if (score >= 1.5 && recent >= 20) out.push({ keyword, score: Math.round(score * 10) / 10 });
+  }
+  return out.sort((a, b) => b.score - a.score).slice(0, 40);
 }
 
 // ── 네이버 검색광고 키워드도구 (키 필요) — 월간 검색량 ─────────────
@@ -247,29 +286,47 @@ async function main() {
     for (const c of shopping.categories) c.newOnes = prev?.naverShopping ? c.keywords.filter((k) => !prevShop.has(`${c.cid}|${k}`)) : [];
   }
 
-  // 연관 검색어: 급상승 전체 + 유튜브 키워드 상위 15개 + 쇼핑 분야별 상위 5개 + 팀 시드 (오늘 이미 받은 건 건너뜀)
+  // 네이버 추이 후보: 구글 급상승 + 쇼핑 인기어 전부 + 유튜브 키워드 + 시드와 그 네이버 연관 검색어
+  const suggestions = { ...(existing?.suggestions || {}) };
+  const labPool = [...new Set([
+    ...trends.map((t) => t.keyword),
+    ...(shopping?.categories.flatMap((c) => c.keywords) || []),
+    ...(youtube?.keywords.slice(0, 30).map((k) => k.keyword) || []),
+    ...seeds,
+    ...seeds.flatMap((k) => suggestions[k]?.naver || []),
+  ])];
+  const oldLab = existing?.naver?.datalab || {};
+  const oldAd = existing?.naver?.searchad || {};
+  const [newLab, newAd] = await Promise.all([
+    naverDatalab(labPool.filter((k) => !oldLab[k])).catch((e) => { errors.datalab = e.message; return null; }),
+    naverSearchAd(labPool.filter((k) => !oldAd[k.replace(/\s+/g, '')])).catch((e) => { errors.searchad = e.message; return null; }),
+  ]);
+  const datalab = newLab ? { ...oldLab, ...newLab } : existing?.naver?.datalab || null;
+  const searchad = newAd ? { ...oldAd, ...newAd } : existing?.naver?.searchad || null;
+  const rising = datalab ? findRising(datalab) : null;
+
+  // 연관 검색어: 급상승 전체 + 네이버 급상승 + 유튜브 키워드 상위 15개 + 쇼핑 분야별 상위 5개 + 팀 시드 (오늘 이미 받은 건 건너뜀)
   const targets = [...new Set([
     ...trends.map((t) => t.keyword),
+    ...(rising?.map((r) => r.keyword) || []),
     ...(youtube?.keywords.slice(0, 15).map((k) => k.keyword) || []),
     ...(shopping?.categories.flatMap((c) => c.keywords.slice(0, 5)) || []),
     ...seeds,
   ])];
-  const suggestions = { ...(existing?.suggestions || {}) };
   for (const q of targets) {
     if (suggestions[q]) continue;
     suggestions[q] = await suggestAll(q);
     await sleep(150);
   }
 
-  const volumeTargets = [...new Set([...trends.map((t) => t.keyword), ...seeds])];
-  const oldLab = existing?.naver?.datalab || {};
-  const oldAd = existing?.naver?.searchad || {};
-  const [newLab, newAd] = await Promise.all([
-    naverDatalab(volumeTargets.filter((k) => !oldLab[k])).catch((e) => { errors.datalab = e.message; return null; }),
-    naverSearchAd(volumeTargets.filter((k) => !oldAd[k.replace(/\s+/g, '')])).catch((e) => { errors.searchad = e.message; return null; }),
-  ]);
-  const datalab = newLab ? { ...oldLab, ...newLab } : existing?.naver?.datalab || null;
-  const searchad = newAd ? { ...oldAd, ...newAd } : existing?.naver?.searchad || null;
+  // 화면에 나오는 키워드의 블로그 글 수
+  const oldBlog = existing?.naver?.blog || {};
+  const blogPool = [...new Set([...labPool, ...(rising?.map((r) => r.keyword) || [])])].filter((k) => oldBlog[k] == null);
+  let blog = existing?.naver?.blog || null;
+  try {
+    const newBlog = await naverBlogCount(blogPool);
+    if (newBlog) blog = { ...oldBlog, ...newBlog };
+  } catch (e) { errors.blog = e.message; }
 
   // 어제와 비교: 새로 등장한 급상승 키워드 표시, 연속 등장 일수
   const prevStreak = new Map((prev?.google || []).map((t) => [t.keyword, t.streak || 1]));
@@ -286,6 +343,7 @@ async function main() {
       youtube: !!youtube,
       naverDatalab: !!datalab,
       naverSearchAd: !!searchad,
+      naverBlog: !!blog,
       naverShopping: !!shopping,
     },
     google: trends,
@@ -293,7 +351,7 @@ async function main() {
     seeds,
     suggestions,
     naverShopping: shopping,
-    naver: { datalab, searchad },
+    naver: { datalab, searchad, rising, blog },
     errors,
   };
 
@@ -304,7 +362,7 @@ async function main() {
   await writeFile(`${ROOT}data/index.json`, JSON.stringify({ dates }));
 
   console.log(`✔ ${date}: 구글 ${trends.length}개, 유튜브 ${youtube ? youtube.videos.length + '개' : '키 없음'}, ` +
-    `연관검색어 ${targets.length}개, 데이터랩 ${datalab ? 'O' : '키 없음'}, 검색광고 ${searchad ? 'O' : '키 없음'}, 쇼핑 ${shopping ? shopping.categories.length + '개 분야' : 'X'}`);
+    `연관검색어 ${targets.length}개, 데이터랩 ${datalab ? Object.keys(datalab).length + '개(급상승 ' + rising.length + ')' : '키 없음'}, 블로그 ${blog ? Object.keys(blog).length + '개' : '키 없음'}, 검색광고 ${searchad ? 'O' : '키 없음'}, 쇼핑 ${shopping ? shopping.categories.length + '개 분야' : 'X'}`);
   if (Object.keys(errors).length) console.warn('오류:', errors);
 }
 

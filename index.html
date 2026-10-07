@@ -60,6 +60,9 @@ section{margin-bottom:36px}
 .b-streak{background:var(--accent-soft);color:var(--accent)}
 .traffic{margin-left:auto;color:var(--muted);font-size:13px;white-space:nowrap}
 .vol{font-size:12px;color:var(--naver);white-space:nowrap}
+.blog{font-size:12px;color:var(--muted);white-space:nowrap}
+.blog.low{color:var(--naver);font-weight:700}
+.up{font-size:13px;font-weight:700;color:var(--hot);white-space:nowrap;margin-left:auto}
 .news{color:var(--muted);font-size:13px;margin:4px 0 0 38px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .detail{display:none;margin:12px 0 2px 38px}
 .trend.open .detail{display:block}
@@ -128,6 +131,11 @@ footer{color:var(--muted);font-size:12px;text-align:center;margin-top:40px}
   </section>
 
   <section>
+    <div class="sec-h"><h2>📈 네이버 급상승 검색어</h2><span class="hint">최근 3일 검색량이 그 전 4주보다 크게 오른 키워드 · 블로그 글 수가 적을수록 쓰기 좋아요</span></div>
+    <div class="trend-list" id="nrising"></div>
+  </section>
+
+  <section>
     <div class="sec-h"><h2>🛒 네이버 쇼핑 인기 검색어</h2><span class="hint" id="shop-hint">분야별 TOP 20</span></div>
     <div class="cat-tabs" id="cat-tabs"></div>
     <div class="card shop" id="shop"></div>
@@ -191,6 +199,11 @@ function volumeOf(k) {
   const v = data.naver?.searchad?.[k.replace(/\s+/g, '')];
   return v ? v.pc + v.mobile : null;
 }
+function blogOf(k) {
+  const n = data.naver?.blog?.[k];
+  if (n == null) return '';
+  return `<span class="blog ${n < 1000 ? 'low' : ''}" title="네이버 블로그 글 수">블로그 ${fmt(n)}</span>`;
+}
 function spark(arr) {
   if (!arr?.length) return '';
   const w = 160, h = 28, max = Math.max(...arr, 1);
@@ -214,7 +227,7 @@ function render() {
   const chip = (on, label) => `<span class="status ${on ? 'on' : 'off'}">${label}</span>`;
   $('#status').innerHTML = [
     chip(S.google, '구글 급상승'), chip(S.naverShopping, '네이버 쇼핑'), chip(true, '연관 검색어 (구글·유튜브·네이버)'),
-    chip(S.youtube, '유튜브 인기'), chip(S.naverSearchAd, '네이버 검색량'), chip(S.naverDatalab, '네이버 추이'),
+    chip(S.youtube, '유튜브 인기'), chip(S.naverSearchAd, '네이버 검색량'), chip(S.naverDatalab, '네이버 급상승·추이'), chip(S.naverBlog, '블로그 글 수'),
     chip(false, '틱톡'), chip(false, '인스타'), chip(false, '스레드'),
   ].join('');
 
@@ -226,7 +239,7 @@ function render() {
         <span class="rank">${i + 1}</span>
         <span class="kw">${esc(t.keyword)}</span>
         ${t.isNew ? '<span class="badge b-new">NEW</span>' : `<span class="badge b-streak">${t.streak}일째</span>`}
-        ${vol != null ? `<span class="vol">월 ${fmt(vol)}회</span>` : ''}
+        ${vol != null ? `<span class="vol">월 ${fmt(vol)}회</span>` : ''}${blogOf(t.keyword)}
         <span class="traffic">검색 ${esc(t.traffic)}</span>
       </div>
       ${t.news?.[0] ? `<div class="news">${esc(t.news[0].title)}</div>` : ''}
@@ -237,6 +250,20 @@ function render() {
       </div>
     </div>`;
   }).join('') : `<div class="card empty">${q ? '검색 결과가 없어요.' : '아직 수집된 급상승 검색어가 없어요.'}</div>`;
+
+  const rising = data.naver?.rising;
+  if (rising) {
+    const rows = rising.filter((r) => match(r.keyword, q));
+    $('#nrising').innerHTML = rows.length ? rows.map((r, i) => `<div class="card trend">
+      <div class="trend-top">
+        <span class="rank">${i + 1}</span><span class="kw">${esc(r.keyword)}</span>${blogOf(r.keyword)}
+        <span class="up">▲ ${Math.round((r.score - 1) * 100)}%</span>
+      </div>
+      <div class="detail">${suggestCols(r.keyword)}${spark(data.naver?.datalab?.[r.keyword])}</div>
+    </div>`).join('') : `<div class="card empty">${q ? '검색 결과가 없어요.' : '오늘은 크게 오른 키워드가 없어요.'}</div>`;
+  } else {
+    $('#nrising').innerHTML = '<div class="card empty"><b>네이버 API HUB 키를 연결하면 열려요.</b></div>';
+  }
 
   const shop = data.naverShopping;
   if (shop?.categories?.length) {
@@ -249,8 +276,8 @@ function render() {
     $('#shop').innerHTML = rows.length ? rows.map(([k, i]) => {
       const vol = volumeOf(k);
       return `<div class="shop-item"><div class="shop-row"><span class="rank">${i + 1}</span><span class="kw" style="font-size:15px">${esc(k)}</span>
-        ${newOnes.has(k) ? '<span class="badge b-new">NEW</span>' : ''}${vol != null ? `<span class="vol">월 ${fmt(vol)}회</span>` : ''}</div>
-        <div class="detail">${data.suggestions?.[k] ? suggestCols(k) : `<div class="tags">${tagBtn(k)}</div>`}</div></div>`;
+        ${newOnes.has(k) ? '<span class="badge b-new">NEW</span>' : ''}${vol != null ? `<span class="vol">월 ${fmt(vol)}회</span>` : ''}${blogOf(k)}</div>
+        <div class="detail">${data.suggestions?.[k] ? suggestCols(k) : `<div class="tags">${tagBtn(k)}</div>`}${spark(data.naver?.datalab?.[k])}</div></div>`;
     }).join('') : '<div class="empty">검색 결과가 없어요.</div>';
   } else {
     $('#cat-tabs').innerHTML = '';
