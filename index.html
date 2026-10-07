@@ -44,11 +44,12 @@ input[type=search]{width:220px}
 .status.on::before{content:"●";margin-right:5px;color:var(--naver)}
 .status.off::before{content:"○";margin-right:5px}
 section{margin-bottom:36px}
-.sec-h{display:flex;align-items:baseline;gap:10px;margin:0 0 12px}
+.sec-h{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;margin:0 0 12px}
 .sec-h h2{margin:0;font-size:19px;font-weight:700}
 .sec-h .hint{color:var(--muted);font-size:13px}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow)}
-.trend-list{display:grid;gap:8px}
+.trend-list{display:grid;grid-template-columns:minmax(0,1fr);gap:8px}
+.card{min-width:0}
 .trend{padding:14px 16px;cursor:pointer}
 .trend-top{display:flex;align-items:center;gap:12px}
 .rank{width:26px;font-weight:900;color:var(--muted);text-align:center;flex:none}
@@ -83,6 +84,16 @@ section{margin-bottom:36px}
 .yt img{width:96px;height:54px;object-fit:cover;border-radius:6px;flex:none;background:var(--surface-2)}
 .yt .t{font-size:13px;font-weight:500;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .yt .c{font-size:12px;color:var(--muted)}
+.cat-tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:10px;scrollbar-width:none}
+.cat-tabs button{font:inherit;font-size:13px;white-space:nowrap;padding:6px 12px;border-radius:99px;border:1px solid var(--line);background:var(--surface);color:var(--muted);cursor:pointer}
+.cat-tabs button.on{background:var(--naver);border-color:var(--naver);color:#fff;font-weight:700}
+.shop{padding:6px 0}
+.shop-row{display:flex;align-items:center;gap:10px;padding:8px 16px;border-top:1px solid var(--line);cursor:pointer}
+.shop-item:first-child .shop-row{border-top:0}
+.shop-row .rank{width:22px}
+.shop-item:nth-child(-n+3) .rank{color:var(--naver)}
+.shop-item .detail{margin:0 16px 12px 48px}
+.shop-item.open .detail{display:block}
 .soon{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
 .soon .card{padding:14px 16px;font-size:13px;color:var(--muted)}
 .soon b{display:block;color:var(--text);font-size:15px;margin-bottom:4px}
@@ -91,7 +102,7 @@ section{margin-bottom:36px}
 footer{color:var(--muted);font-size:12px;text-align:center;margin-top:40px}
 @media (max-width:720px){
   h1{font-size:23px} input[type=search]{width:100%} .controls{width:100%} .controls>*{flex:1}
-  .cols{grid-template-columns:1fr} .detail,.news{margin-left:0} .traffic{display:none}
+  .cols{grid-template-columns:1fr} .detail,.news{margin-left:0} .shop-item .detail{margin:0 16px 12px} .traffic{display:none}
   .seed-grid{grid-template-columns:1fr}
 }
 </style>
@@ -116,6 +127,12 @@ footer{color:var(--muted);font-size:12px;text-align:center;margin-top:40px}
   </section>
 
   <section>
+    <div class="sec-h"><h2>🛒 네이버 쇼핑 인기 검색어</h2><span class="hint" id="shop-hint">분야별 TOP 20</span></div>
+    <div class="cat-tabs" id="cat-tabs"></div>
+    <div class="card shop" id="shop"></div>
+  </section>
+
+  <section>
     <div class="sec-h"><h2>▶️ 유튜브 인기 키워드</h2><span class="hint">한국 인기 동영상 태그 집계</span></div>
     <div id="youtube"></div>
   </section>
@@ -128,7 +145,7 @@ footer{color:var(--muted);font-size:12px;text-align:center;margin-top:40px}
   <section>
     <div class="sec-h"><h2>🛠 곧 추가될 플랫폼</h2></div>
     <div class="soon">
-      <div class="card"><b>틱톡</b>공식 트렌드 API가 없어 Creative Center 데이터 연동 방식을 검토 중이에요.</div>
+      <div class="card"><b>틱톡</b>Creative Center 트렌드가 로그인 필수로 바뀌어 틱톡 비즈니스 계정이 필요해요.</div>
       <div class="card"><b>인스타그램</b>Meta 앱 심사 후 지정한 해시태그의 인기 게시물을 볼 수 있어요.</div>
       <div class="card"><b>스레드</b>Meta 앱 심사 후 키워드별 언급량을 볼 수 있어요.</div>
     </div>
@@ -142,6 +159,7 @@ footer{color:var(--muted);font-size:12px;text-align:center;margin-top:40px}
 const $ = (s) => document.querySelector(s);
 const esc = (s = '') => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 let data = null;
+let shopCat = null;
 
 function toast(msg) {
   const t = $('#toast'); t.textContent = msg; t.classList.add('show');
@@ -154,6 +172,10 @@ document.addEventListener('click', (e) => {
     navigator.clipboard?.writeText(tag.dataset.copy).then(() => toast(`"${tag.dataset.copy}" 복사됨`));
     return;
   }
+  const tab = e.target.closest('[data-cat]');
+  if (tab) { shopCat = tab.dataset.cat; render(); return; }
+  const si = e.target.closest('.shop-item');
+  if (si && !e.target.closest('a')) { si.classList.toggle('open'); return; }
   const tr = e.target.closest('.trend');
   if (tr && !e.target.closest('a')) tr.classList.toggle('open');
 });
@@ -187,7 +209,7 @@ function render() {
   $('#sub').textContent = `${data.date} · ${new Date(data.generatedAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} 업데이트`;
   const chip = (on, label) => `<span class="status ${on ? 'on' : 'off'}">${label}</span>`;
   $('#status').innerHTML = [
-    chip(S.google, '구글 급상승'), chip(true, '연관 검색어 (구글·유튜브·네이버)'),
+    chip(S.google, '구글 급상승'), chip(S.naverShopping, '네이버 쇼핑'), chip(true, '연관 검색어 (구글·유튜브·네이버)'),
     chip(S.youtube, '유튜브 인기'), chip(S.naverSearchAd, '네이버 검색량'), chip(S.naverDatalab, '네이버 추이'),
     chip(false, '틱톡'), chip(false, '인스타'), chip(false, '스레드'),
   ].join('');
@@ -211,6 +233,25 @@ function render() {
       </div>
     </div>`;
   }).join('') : `<div class="card empty">${q ? '검색 결과가 없어요.' : '아직 수집된 급상승 검색어가 없어요.'}</div>`;
+
+  const shop = data.naverShopping;
+  if (shop?.categories?.length) {
+    if (!shop.categories.some((c) => c.cid === shopCat)) shopCat = shop.categories[0].cid;
+    $('#shop-hint').textContent = `${shop.day} 하루 기준 · 분야별 TOP 20 · 누르면 연관 검색어`;
+    $('#cat-tabs').innerHTML = shop.categories.map((c) => `<button data-cat="${c.cid}" class="${c.cid === shopCat ? 'on' : ''}">${esc(c.name)}</button>`).join('');
+    const c = shop.categories.find((x) => x.cid === shopCat);
+    const newOnes = new Set(c.newOnes || []);
+    const rows = c.keywords.map((k, i) => [k, i]).filter(([k]) => match(k, q));
+    $('#shop').innerHTML = rows.length ? rows.map(([k, i]) => {
+      const vol = volumeOf(k);
+      return `<div class="shop-item"><div class="shop-row"><span class="rank">${i + 1}</span><span class="kw" style="font-size:15px">${esc(k)}</span>
+        ${newOnes.has(k) ? '<span class="badge b-new">NEW</span>' : ''}${vol != null ? `<span class="vol">월 ${fmt(vol)}회</span>` : ''}</div>
+        <div class="detail">${data.suggestions?.[k] ? suggestCols(k) : `<div class="tags">${tagBtn(k)}</div>`}</div></div>`;
+    }).join('') : '<div class="empty">검색 결과가 없어요.</div>';
+  } else {
+    $('#cat-tabs').innerHTML = '';
+    $('#shop').innerHTML = '<div class="empty">이 날짜에는 네이버 쇼핑 데이터가 없어요.</div>';
+  }
 
   const yt = data.youtube;
   $('#youtube').innerHTML = yt ? `

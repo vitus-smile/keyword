@@ -42,6 +42,41 @@ async function googleTrends() {
   }));
 }
 
+// ── 네이버 쇼핑인사이트 분야별 인기 검색어 (어제 하루 기준) ─────────
+const NAVER_CATS = {
+  50000000: '패션의류', 50000001: '패션잡화', 50000002: '화장품/미용', 50000003: '디지털/가전',
+  50000004: '가구/인테리어', 50000005: '출산/육아', 50000006: '식품', 50000007: '스포츠/레저',
+  50000008: '생활/건강', 50000009: '여가/생활편의',
+};
+async function naverShopping() {
+  const day = new Date(Date.now() + 9 * 3600e3 - 86400e3).toISOString().slice(0, 10);
+  const out = [];
+  for (const [cid, name] of Object.entries(NAVER_CATS)) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const res = await get('https://datalab.naver.com/shoppingInsight/getCategoryKeywordRank.naver', {
+          method: 'POST',
+          headers: {
+            Referer: 'https://datalab.naver.com/shoppingInsight/sCategory.naver',
+            'X-Requested-With': 'XMLHttpRequest',
+            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+          },
+          body: `cid=${cid}&timeUnit=date&startDate=${day}&endDate=${day}&age=&gender=&device=&page=1&count=20`,
+        });
+        const j = await res.json();
+        out.push({ cid, name, keywords: (j.ranks || []).map((r) => r.keyword) });
+        break;
+      } catch (e) {
+        console.warn(`쇼핑 ${name} 재시도 ${attempt + 1}:`, e.message);
+        await sleep(5000 * (attempt + 1));
+      }
+    }
+    await sleep(1500);
+  }
+  if (!out.length) throw new Error('네이버 쇼핑 전 분야 실패');
+  return { day, categories: out };
+}
+
 // ── 자동완성(연관 검색어) ───────────────────────────────────────
 async function suggestGoogle(q, yt = false) {
   const u = `https://suggestqueries.google.com/complete/search?client=firefox&hl=ko&gl=kr${yt ? '&ds=yt' : ''}&q=${encodeURIComponent(q)}`;
@@ -152,6 +187,9 @@ async function main() {
 
   // 하루 여러 번 실행되면 오늘 스냅샷에 누적한다 (구글 RSS는 한 번에 10개만 줌)
   const existing = await readJSON(`${ROOT}data/history/${date}.json`, null);
+  const index = await readJSON(`${ROOT}data/index.json`, { dates: [] });
+  const prevDate = index.dates.filter((d) => d < date).at(-1);
+  const prev = prevDate ? await readJSON(`${ROOT}data/history/${prevDate}.json`, null) : null;
 
   let fresh = [];
   try { fresh = await googleTrends(); } catch (e) { errors.google = e.message; }
@@ -167,10 +205,21 @@ async function main() {
   let youtube = existing?.youtube || null;
   try { youtube = (await youtubeTrending()) || youtube; } catch (e) { errors.youtube = e.message; }
 
-  // 연관 검색어: 급상승 전체 + 유튜브 키워드 상위 15개 + 팀 시드 (오늘 이미 받은 건 건너뜀)
+  // 네이버 쇼핑은 어제 하루치라 하루 한 번만 받는다
+  let shopping = existing?.naverShopping || null;
+  if (!shopping || shopping.categories.length < Object.keys(NAVER_CATS).length) {
+    try { shopping = await naverShopping(); } catch (e) { errors.naverShopping = e.message; }
+  }
+  if (shopping) {
+    const prevShop = new Set((prev?.naverShopping?.categories || []).flatMap((c) => c.keywords.map((k) => `${c.cid}|${k}`)));
+    for (const c of shopping.categories) c.newOnes = prev?.naverShopping ? c.keywords.filter((k) => !prevShop.has(`${c.cid}|${k}`)) : [];
+  }
+
+  // 연관 검색어: 급상승 전체 + 유튜브 키워드 상위 15개 + 쇼핑 분야별 상위 5개 + 팀 시드 (오늘 이미 받은 건 건너뜀)
   const targets = [...new Set([
     ...trends.map((t) => t.keyword),
     ...(youtube?.keywords.slice(0, 15).map((k) => k.keyword) || []),
+    ...(shopping?.categories.flatMap((c) => c.keywords.slice(0, 5)) || []),
     ...seeds,
   ])];
   const suggestions = { ...(existing?.suggestions || {}) };
@@ -191,9 +240,6 @@ async function main() {
   const searchad = newAd ? { ...oldAd, ...newAd } : existing?.naver?.searchad || null;
 
   // 어제와 비교: 새로 등장한 급상승 키워드 표시, 연속 등장 일수
-  const index = await readJSON(`${ROOT}data/index.json`, { dates: [] });
-  const prevDate = index.dates.filter((d) => d < date).at(-1);
-  const prev = prevDate ? await readJSON(`${ROOT}data/history/${prevDate}.json`, null) : null;
   const prevStreak = new Map((prev?.google || []).map((t) => [t.keyword, t.streak || 1]));
   for (const t of trends) {
     t.streak = prevStreak.has(t.keyword) ? prevStreak.get(t.keyword) + 1 : 1;
@@ -208,11 +254,13 @@ async function main() {
       youtube: !!youtube,
       naverDatalab: !!datalab,
       naverSearchAd: !!searchad,
+      naverShopping: !!shopping,
     },
     google: trends,
     youtube,
     seeds,
     suggestions,
+    naverShopping: shopping,
     naver: { datalab, searchad },
     errors,
   };
@@ -224,7 +272,7 @@ async function main() {
   await writeFile(`${ROOT}data/index.json`, JSON.stringify({ dates }));
 
   console.log(`✔ ${date}: 구글 ${trends.length}개, 유튜브 ${youtube ? youtube.videos.length + '개' : '키 없음'}, ` +
-    `연관검색어 ${targets.length}개, 데이터랩 ${datalab ? 'O' : '키 없음'}, 검색광고 ${searchad ? 'O' : '키 없음'}`);
+    `연관검색어 ${targets.length}개, 데이터랩 ${datalab ? 'O' : '키 없음'}, 검색광고 ${searchad ? 'O' : '키 없음'}, 쇼핑 ${shopping ? shopping.categories.length + '개 분야' : 'X'}`);
   if (Object.keys(errors).length) console.warn('오류:', errors);
 }
 
