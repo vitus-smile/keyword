@@ -1,6 +1,6 @@
 // 비투스의 키워드 세상 — 일일 수집기
 // 키 없이 동작: 구글 급상승(RSS), 구글·유튜브·네이버 자동완성
-// 키가 있으면 추가: 유튜브 인기 동영상(YOUTUBE_API_KEY), 네이버 데이터랩(NAVER_CLIENT_ID/SECRET),
+// 키가 있으면 추가: 유튜브 인기 동영상(YOUTUBE_API_KEY), 네이버 데이터랩(NAVER_HUB_KEY_ID/KEY 또는 NAVER_CLIENT_ID/SECRET),
 //                  네이버 검색광고 키워드도구(NAVER_AD_API_KEY/SECRET/CUSTOMER_ID)
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { createHmac } from 'node:crypto';
@@ -123,21 +123,30 @@ async function youtubeTrending() {
 }
 
 // ── 네이버 데이터랩 검색어 트렌드 (키 필요) — 최근 30일 상대 추이 ──
+// 2026-07-31 이후 신규 키는 NAVER API HUB(네이버 클라우드)에서만 발급된다. HUB 키가 있으면 HUB, 없으면 기존 개발자센터 키
+function datalabEndpoint() {
+  if (env.NAVER_HUB_KEY_ID && env.NAVER_HUB_KEY) {
+    return { url: 'https://naverapihub.apigw.ntruss.com/search-trend/v1/search',
+      headers: { 'X-NCP-APIGW-API-KEY-ID': env.NAVER_HUB_KEY_ID, 'X-NCP-APIGW-API-KEY': env.NAVER_HUB_KEY } };
+  }
+  if (env.NAVER_CLIENT_ID && env.NAVER_CLIENT_SECRET) {
+    return { url: 'https://openapi.naver.com/v1/datalab/search',
+      headers: { 'X-Naver-Client-Id': env.NAVER_CLIENT_ID, 'X-Naver-Client-Secret': env.NAVER_CLIENT_SECRET } };
+  }
+  return null;
+}
 async function naverDatalab(keywords) {
-  if (!env.NAVER_CLIENT_ID || !env.NAVER_CLIENT_SECRET) return null;
+  const ep = datalabEndpoint();
+  if (!ep) return null;
   const end = new Date(Date.now() + 9 * 3600e3);
   const start = new Date(end - 30 * 86400e3);
   const out = {};
   for (let i = 0; i < keywords.length; i += 5) {
     const group = keywords.slice(i, i + 5);
     try {
-      const res = await get('https://openapi.naver.com/v1/datalab/search', {
+      const res = await get(ep.url, {
         method: 'POST',
-        headers: {
-          'X-Naver-Client-Id': env.NAVER_CLIENT_ID,
-          'X-Naver-Client-Secret': env.NAVER_CLIENT_SECRET,
-          'Content-Type': 'application/json',
-        },
+        headers: { ...ep.headers, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           startDate: start.toISOString().slice(0, 10),
           endDate: end.toISOString().slice(0, 10),

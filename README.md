@@ -10,7 +10,7 @@
 | 네이버 쇼핑인사이트 | 불필요 | 10개 분야별 인기 검색어 TOP 20 (어제 하루 기준) |
 | 구글·유튜브·네이버 자동완성 | 불필요 | 키워드별 연관 검색어 (글감 아이디어) |
 | 유튜브 인기 동영상 | `YOUTUBE_API_KEY` | 한국 인기 동영상 50개, 태그 빈도 |
-| 네이버 데이터랩 | `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET` | 최근 30일 검색 추이 |
+| 네이버 데이터랩 | `NAVER_HUB_KEY_ID`, `NAVER_HUB_KEY` (NAVER API HUB) | 최근 30일 검색 추이 |
 | 네이버 검색광고 키워드도구 | `NAVER_AD_API_KEY`, `NAVER_AD_SECRET`, `NAVER_AD_CUSTOMER_ID` | 월간 검색량(PC·모바일) |
 
 키는 GitHub 저장소 **Settings → Secrets and variables → Actions**에 넣으면 다음 수집부터 자동으로 켜진다.
@@ -18,7 +18,7 @@
 ## API 키 발급
 
 - **유튜브**: [Google Cloud Console](https://console.cloud.google.com/) → 프로젝트 생성 → "YouTube Data API v3" 사용 설정 → 사용자 인증 정보 → API 키
-- **네이버 데이터랩**: [네이버 개발자센터](https://developers.naver.com/apps/#/register) → 애플리케이션 등록 → 사용 API "데이터랩(검색어트렌드)" → Client ID/Secret
+- **네이버 데이터랩**: 2026-07-31부터 개발자센터 신규 발급이 끝나고 [네이버 클라우드 플랫폼](https://www.ncloud.com/)의 NAVER API HUB에서 발급한다. 콘솔에서 NAVER API HUB 이용 신청 → API 키(ID·Key) 발급. 예전 개발자센터 키(`NAVER_CLIENT_ID`/`NAVER_CLIENT_SECRET`)도 2027-06-30까지는 동작한다.
 - **네이버 검색광고**: [searchad.naver.com](https://searchad.naver.com/) 가입(무료) → 도구 → API 사용 관리 → 액세스 라이선스·비밀키·CUSTOMER_ID
 
 ## 관심 키워드
