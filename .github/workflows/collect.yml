@@ -2,7 +2,7 @@ name: 키워드 수집
 
 on:
   schedule:
-    - cron: '0 */3 * * *'   # 3시간마다 (KST 0·3·6·9·12·15·18·21시)
+    - cron: '0 15,21,3,9 * * *'   # KST 00·06·12·18시 (UTC 15·21·03·09시)
   workflow_dispatch:
 
 permissions:

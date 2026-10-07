@@ -48,8 +48,15 @@ const NAVER_CATS = {
   50000004: '가구/인테리어', 50000005: '출산/육아', 50000006: '식품', 50000007: '스포츠/레저',
   50000008: '생활/건강', 50000009: '여가/생활편의',
 };
+// 자정 직후에는 어제 데이터가 아직 없을 수 있어 하루 더 앞을 쓴다
 async function naverShopping() {
-  const day = new Date(Date.now() + 9 * 3600e3 - 86400e3).toISOString().slice(0, 10);
+  for (const back of [1, 2]) {
+    const r = await naverShoppingDay(new Date(Date.now() + 9 * 3600e3 - back * 86400e3).toISOString().slice(0, 10));
+    if (r.categories.length) return r;
+  }
+  throw new Error('네이버 쇼핑 전 분야 실패');
+}
+async function naverShoppingDay(day) {
   const out = [];
   for (const [cid, name] of Object.entries(NAVER_CATS)) {
     for (let attempt = 0; attempt < 3; attempt++) {
@@ -64,7 +71,8 @@ async function naverShopping() {
           body: `cid=${cid}&timeUnit=date&startDate=${day}&endDate=${day}&age=&gender=&device=&page=1&count=20`,
         });
         const j = await res.json();
-        out.push({ cid, name, keywords: (j.ranks || []).map((r) => r.keyword) });
+        const keywords = (j.ranks || []).map((r) => r.keyword);
+        if (keywords.length) out.push({ cid, name, keywords });
         break;
       } catch (e) {
         console.warn(`쇼핑 ${name} 재시도 ${attempt + 1}:`, e.message);
@@ -73,7 +81,6 @@ async function naverShopping() {
     }
     await sleep(1500);
   }
-  if (!out.length) throw new Error('네이버 쇼핑 전 분야 실패');
   return { day, categories: out };
 }
 
@@ -125,23 +132,36 @@ async function youtubeTrending() {
       thumb: v.snippet.thumbnails?.medium?.url,
       views: +v.statistics.viewCount || 0,
       tags: (v.snippet.tags || []).slice(0, 15),
+      catId: v.snippet.categoryId,
     }));
-    for (const v of videos) seen.set(v.id, v);
+    for (const v of videos) {
+      v.ytCat = v.catId || (cid !== '0' ? cid : null);
+      seen.set(v.id, { ...seen.get(v.id), ...v, ytCat: v.ytCat || seen.get(v.id)?.ytCat });
+    }
     categories.push({ cid, name, videos });
   }
   if (!categories.length) throw new Error('유튜브 인기 동영상 0건');
 
   // 전 분야 영상의 태그·제목 키워드 빈도 (한 영상에서는 한 번만 셈)
   const freq = new Map();
-  const skip = /^(shorts?|쇼츠|youtube|유튜브|vlog|브이로그|funny|video|official|mv|m\/v|teaser|예고편|full|ep\.?\d*)$/i;
+  const kwCats = new Map();
+  const skip = /^(shorts?|쇼츠|youtube|유튜브|vlog|브이로그|funny|video|official|mv|m\/v|teaser|예고편|full|ep\.?\d*|뉴스|news|예능|정치|리얼리티|유머|코미디|comedy|entertainment|kpop|k-pop|music|음악|게임|game|gaming|동물|스포츠|sports|mbc|kbs|sbs|jtbc|tvn|ytn|mbn)$/i;
   for (const v of seen.values()) {
     const words = new Set([...v.tags, ...titleTerms(v.title)]
       .map((w) => w.trim()).filter((w) => w.length >= 2 && w.length <= 20 && !skip.test(w)));
-    for (const w of words) freq.set(w, (freq.get(w) || 0) + 1);
+    for (const w of words) {
+      freq.set(w, (freq.get(w) || 0) + 1);
+      if (v.ytCat) { const m = kwCats.get(w) || {}; m[v.ytCat] = (m[v.ytCat] || 0) + 1; kwCats.set(w, m); }
+    }
   }
+  for (const c of categories) for (const v of c.videos) v.ytCat = seen.get(v.id)?.ytCat || (c.cid !== '0' ? c.cid : null);
   const sorted = [...freq].sort((a, b) => b[1] - a[1]);
   const keywords = [...sorted.filter(([, n]) => n >= 2), ...sorted.filter(([, n]) => n < 2)].slice(0, 50)
-    .map(([keyword, count]) => ({ keyword, count }));
+    .map(([keyword, count]) => {
+      const m = kwCats.get(keyword) || {};
+      const ytCat = Object.keys(m).sort((a, b) => m[b] - m[a])[0] || null;
+      return { keyword, count, ytCat };
+    });
   return { videos: categories[0].videos, categories, keywords };
 }
 
@@ -246,6 +266,80 @@ async function naverSearchAd(keywords) {
   return out;
 }
 
+// ── 분야 분류 ───────────────────────────────────────────────────
+// 모든 플랫폼을 같은 분야 이름으로 맞춘다
+const CATEGORIES = ['연예·방송', '음악', '스포츠', '게임', '뉴스·사회', '경제·재테크', 'IT·가전', '패션·뷰티',
+  '푸드', '생활·리빙', '육아', '반려동물', '여행·여가', '기타'];
+const SHOP_TO_CAT = { 50000000: '패션·뷰티', 50000001: '패션·뷰티', 50000002: '패션·뷰티', 50000003: 'IT·가전',
+  50000004: '생활·리빙', 50000005: '육아', 50000006: '푸드', 50000007: '스포츠', 50000008: '생활·리빙', 50000009: '여행·여가' };
+const YT_TO_CAT = { 24: '연예·방송', 10: '음악', 26: '생활·리빙', 22: '기타', 25: '뉴스·사회', 17: '스포츠', 20: '게임',
+  23: '연예·방송', 1: '연예·방송', 28: 'IT·가전', 15: '반려동물', 2: '생활·리빙', 19: '여행·여가', 27: '기타', 29: '뉴스·사회' };
+// 키워드와 관련 뉴스 제목에 이 단어가 많이 나오는 분야로 분류
+const RULES = [
+  ['스포츠', /경기|골|감독|리그|선수|우승|야구|축구|농구|배구|골프|올림픽|월드컵|KBO|MLB|EPL|홈런|투수|타자|챔피언|대표팀|PGA|LPGA|마라톤/],
+  ['연예·방송', /배우|드라마|예능|아이돌|컴백|열애|결혼|방송|출연|팬미팅|시청률|영화|개봉|웹툰|애니|넷플릭스|티빙|웨이브/],
+  ['음악', /가수|앨범|신곡|음원|뮤직|콘서트|MV|차트|멜론|빌보드/],
+  ['게임', /게임|롤|LOL|리그오브레전드|배그|발로란트|스팀|닌텐도|플스|피파|메이플|로스트아크/],
+  ['경제·재테크', /주가|증시|코스피|코스닥|금리|환율|코인|비트코인|은행|금융|주식|부동산|청약|대출|ETF|상장|실적|배당|연금|세금|보험|신협|카드|적금|예금/],
+  ['뉴스·사회', /대통령|국회|의원|장관|정부|검찰|경찰|법원|사고|화재|지진|태풍|선거|정책|북한|재판|사망|구속|수사|인구|지자체|시장|도지사/],
+  ['IT·가전', /아이폰|갤럭시|AI|인공지능|출시|애플|삼성전자|챗GPT|반도체|노트북|태블릿|앱|스마트폰|발사|위성|우주/],
+  ['패션·뷰티', /화장품|메이크업|코디|패션|스킨케어|향수|자켓|패딩|원피스|신발|운동화|런닝화|러닝화|스니커즈|가방/],
+  ['푸드', /맛집|레시피|요리|먹방|라면|커피|디저트|과자|빵|음식|식단/],
+  ['육아', /육아|아기|임신|출산|어린이|유아|키즈/],
+  ['반려동물', /강아지|고양이|반려|펫|댕댕/],
+  ['여행·여가', /여행|단풍|축제|캠핑|호텔|항공|관광|등산|휴가|연휴|공연|전시/],
+  ['생활·리빙', /인테리어|청소|살림|건강|다이어트|운동|병원|날씨|가습기|난방/],
+];
+function ruleCategory(text) {
+  let best = null, bestN = 0;
+  for (const [cat, re] of RULES) {
+    // 긴 단어가 맞을수록 높게 (리그오브레전드 > 리그)
+    const n = (text.match(new RegExp(re.source, 'g')) || []).reduce((a, m) => a + m.length, 0);
+    if (n > bestN) { best = cat; bestN = n; }
+  }
+  return best;
+}
+
+// ── 통합 순위 ───────────────────────────────────────────────────
+// 플랫폼마다 1위 100점에서 순위가 내려갈수록 점수가 줄어든다.
+// 쇼핑은 분야가 10개라 1위가 10개 나오므로 70%만 반영한다. 한 플랫폼 안에서는 가장 높은 점수 하나만 센다.
+// 여러 플랫폼(구글·네이버·유튜브)에 동시에 뜨면 플랫폼 하나 늘 때마다 +50점.
+const norm = (k) => k.replace(/\s+/g, '').toLowerCase();
+function buildUnified({ trends, rising, shopping, youtube }) {
+  const map = new Map();
+  const add = (kw, platform, label, points, catHint) => {
+    const id = norm(kw);
+    let e = map.get(id);
+    if (!e) map.set(id, (e = { keyword: kw, signals: [], platforms: new Set(), hints: [] }));
+    e.signals.push({ platform, label, points: Math.round(points) });
+    e.platforms.add(platform);
+    if (catHint) e.hints.push(catHint);
+  };
+  const pts = (i, n) => 100 * (1 - i / Math.max(n, 1));
+  trends.forEach((t, i) => add(t.keyword, 'google', `구글 급상승 ${i + 1}위`, pts(i, trends.length),
+    ruleCategory([t.keyword, ...t.news.map((n) => n.title)].join(' '))));
+  (rising || []).forEach((r, i) => add(r.keyword, 'naver', `네이버 급상승 ${i + 1}위`, pts(i, rising.length), null));
+  for (const c of shopping?.categories || []) {
+    c.keywords.forEach((k, i) => add(k, 'naver', `쇼핑 ${c.name} ${i + 1}위`, 0.7 * pts(i, c.keywords.length), `shop:${SHOP_TO_CAT[c.cid]}`));
+  }
+  (youtube?.keywords || []).forEach((k, i) => add(k.keyword, 'youtube', `유튜브 인기영상 ${k.count}개`, pts(i, youtube.keywords.length),
+    k.ytCat ? `yt:${YT_TO_CAT[k.ytCat]}` : null));
+
+  return [...map.values()].map((e) => {
+    // 플랫폼마다 가장 높은 점수 하나만 센다
+    const best = {};
+    for (const sg of e.signals) best[sg.platform] = Math.max(best[sg.platform] || 0, sg.points);
+    const base = Object.values(best).reduce((a, b) => a + b, 0);
+    // 분야: 쇼핑 분야 > 키워드·뉴스 단어 규칙 > 유튜브 영상 분야 > 기타
+    const shop = e.hints.find((h) => h.startsWith('shop:'));
+    const rule = e.hints.find((h) => !h.includes(':')) || ruleCategory(e.keyword);
+    const yt = e.hints.find((h) => h.startsWith('yt:'));
+    const category = shop?.slice(5) || rule || yt?.slice(3) || '기타';
+    return { keyword: e.keyword, category, platforms: [...e.platforms],
+      score: Math.round(base + 50 * (e.platforms.size - 1)), signals: e.signals };
+  }).sort((a, b) => b.score - a.score);
+}
+
 // ── 실행 ─────────────────────────────────────────────────────────
 async function readJSON(p, fallback) {
   try { return JSON.parse(await readFile(p, 'utf8')); } catch { return fallback; }
@@ -254,7 +348,6 @@ async function readJSON(p, fallback) {
 async function main() {
   const date = todayKST();
   const errors = {};
-  const { seeds = [] } = await readJSON(`${ROOT}config/seeds.json`, {});
 
   // 하루 여러 번 실행되면 오늘 스냅샷에 누적한다 (구글 RSS는 한 번에 10개만 줌)
   const existing = await readJSON(`${ROOT}data/history/${date}.json`, null);
@@ -286,19 +379,18 @@ async function main() {
     for (const c of shopping.categories) c.newOnes = prev?.naverShopping ? c.keywords.filter((k) => !prevShop.has(`${c.cid}|${k}`)) : [];
   }
 
-  // 네이버 추이 후보: 구글 급상승 + 쇼핑 인기어 전부 + 유튜브 키워드 + 시드와 그 네이버 연관 검색어
+  // 네이버 추이 후보: 구글 급상승 + 쇼핑 인기어 전부 + 유튜브 키워드 + 구글 급상승의 네이버 연관 검색어
   const suggestions = { ...(existing?.suggestions || {}) };
   const labPool = [...new Set([
     ...trends.map((t) => t.keyword),
     ...(shopping?.categories.flatMap((c) => c.keywords) || []),
     ...(youtube?.keywords.slice(0, 30).map((k) => k.keyword) || []),
-    ...seeds,
-    ...seeds.flatMap((k) => suggestions[k]?.naver || []),
+    ...trends.slice(0, 10).flatMap((t) => (suggestions[t.keyword]?.naver || []).slice(0, 3)),
   ])];
   const oldLab = existing?.naver?.datalab || {};
   const oldAd = existing?.naver?.searchad || {};
   const [newLab, newAd] = await Promise.all([
-    naverDatalab(labPool.filter((k) => !oldLab[k])).catch((e) => { errors.datalab = e.message; return null; }),
+    naverDatalab(labPool).catch((e) => { errors.datalab = e.message; return null; }),
     naverSearchAd(labPool.filter((k) => !oldAd[k.replace(/\s+/g, '')])).catch((e) => { errors.searchad = e.message; return null; }),
   ]);
   const datalab = newLab ? { ...oldLab, ...newLab } : existing?.naver?.datalab || null;
@@ -311,7 +403,6 @@ async function main() {
     ...(rising?.map((r) => r.keyword) || []),
     ...(youtube?.keywords.slice(0, 15).map((k) => k.keyword) || []),
     ...(shopping?.categories.flatMap((c) => c.keywords.slice(0, 5)) || []),
-    ...seeds,
   ])];
   for (const q of targets) {
     if (suggestions[q]) continue;
@@ -327,6 +418,17 @@ async function main() {
     const newBlog = await naverBlogCount(blogPool);
     if (newBlog) blog = { ...oldBlog, ...newBlog };
   } catch (e) { errors.blog = e.message; }
+
+  const unified = buildUnified({ trends, rising, shopping, youtube });
+  const catOf = new Map(unified.map((u) => [norm(u.keyword), u.category]));
+  const cat = (k) => catOf.get(norm(k)) || ruleCategory(k) || '기타';
+  for (const t of trends) t.category = cat(t.keyword);
+  for (const r of rising || []) r.category = cat(r.keyword);
+  if (youtube) {
+    for (const k of youtube.keywords) k.category = cat(k.keyword);
+    for (const c of youtube.categories) for (const v of c.videos) v.category = YT_TO_CAT[v.ytCat] || '기타';
+  }
+  if (shopping) for (const c of shopping.categories) c.category = SHOP_TO_CAT[c.cid];
 
   // 어제와 비교: 새로 등장한 급상승 키워드 표시, 연속 등장 일수
   const prevStreak = new Map((prev?.google || []).map((t) => [t.keyword, t.streak || 1]));
@@ -348,7 +450,8 @@ async function main() {
     },
     google: trends,
     youtube,
-    seeds,
+    categories: CATEGORIES,
+    unified: unified.slice(0, 300),
     suggestions,
     naverShopping: shopping,
     naver: { datalab, searchad, rising, blog },

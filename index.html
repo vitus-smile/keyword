@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>비투스의 키워드 세상</title>
-<meta name="description" content="유튜브·네이버·구글 키워드를 매일 모아 보여주는 블로그·콘텐츠 주제 발굴 도구">
+<meta name="description" content="구글·네이버·유튜브 트렌드 키워드를 하루 4번 모아 보여주는 블로그·콘텐츠 주제 발굴 도구">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌏</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
@@ -12,102 +12,111 @@
 :root{
   --bg:#f6f7fb; --surface:#fff; --surface-2:#f1f3f8; --line:#e4e7ef;
   --text:#161a23; --muted:#667085; --accent:#5b5bf0; --accent-soft:#ececff;
-  --google:#1a73e8; --youtube:#e62117; --naver:#03a94d; --hot:#ff5a36; --warn:#b7791f;
+  --google:#1a73e8; --youtube:#e62117; --naver:#03a94d; --hot:#ff5a36;
   --shadow:0 1px 2px rgba(16,24,40,.05),0 4px 16px rgba(16,24,40,.04);
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --bg:#0e1015; --surface:#171a21; --surface-2:#1f232c; --line:#2a2f3a;
   --text:#eef0f5; --muted:#98a1b3; --accent:#8b8bff; --accent-soft:#25264a;
-  --google:#6ea8ff; --youtube:#ff5a52; --naver:#2fd27a; --hot:#ff7a5c; --warn:#e0a84a;
-  --shadow:none;
+  --google:#6ea8ff; --youtube:#ff5a52; --naver:#2fd27a; --hot:#ff7a5c; --shadow:none;
 }}
 :root[data-theme="dark"]{
   --bg:#0e1015; --surface:#171a21; --surface-2:#1f232c; --line:#2a2f3a;
   --text:#eef0f5; --muted:#98a1b3; --accent:#8b8bff; --accent-soft:#25264a;
-  --google:#6ea8ff; --youtube:#ff5a52; --naver:#2fd27a; --hot:#ff7a5c; --warn:#e0a84a;
-  --shadow:none;
+  --google:#6ea8ff; --youtube:#ff5a52; --naver:#2fd27a; --hot:#ff7a5c; --shadow:none;
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font-family:'Noto Sans KR',system-ui,sans-serif;font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
 a{color:inherit}
+button{font:inherit;color:inherit}
 .wrap{max-width:1120px;margin:0 auto;padding:0 16px 80px}
-header{padding:32px 0 20px;display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;justify-content:space-between}
-h1{margin:0;font-size:28px;font-weight:900;letter-spacing:-.02em}
+header{padding:28px 0 16px;display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;justify-content:space-between}
+h1{margin:0;font-size:26px;font-weight:900;letter-spacing:-.02em}
 h1 span{color:var(--accent)}
-.sub{color:var(--muted);font-size:14px;margin-top:4px}
+.sub{color:var(--muted);font-size:13px;margin-top:2px}
 .controls{display:flex;gap:8px;flex-wrap:wrap}
-select,input[type=search]{font:inherit;color:var(--text);background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:9px 12px}
+select,input[type=search]{font:inherit;font-size:14px;color:var(--text);background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 12px}
 input[type=search]{width:220px}
-.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:24px}
-.status{font-size:12px;padding:4px 10px;border-radius:99px;background:var(--surface);border:1px solid var(--line);color:var(--muted)}
-.status.on{color:var(--text)}
-.status.on::before{content:"●";margin-right:5px;color:var(--naver)}
-.status.off::before{content:"○";margin-right:5px}
-section{margin-bottom:36px}
-.sec-h{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;margin:0 0 12px}
-.sec-h h2{margin:0;font-size:19px;font-weight:700}
-.sec-h .hint{color:var(--muted);font-size:13px}
-.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow)}
-.trend-list{display:grid;grid-template-columns:minmax(0,1fr);gap:8px}
-.card{min-width:0}
-.trend{padding:14px 16px;cursor:pointer}
-.trend-top{display:flex;align-items:center;gap:12px}
+
+nav{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line);margin:0 -16px 16px;padding:0 16px}
+.menu{display:flex;gap:2px;overflow-x:auto;scrollbar-width:none}
+.menu a{display:flex;align-items:center;gap:6px;padding:12px 14px;text-decoration:none;color:var(--muted);font-weight:500;white-space:nowrap;border-bottom:2px solid transparent}
+.menu a:hover{color:var(--text)}
+.menu a.on{color:var(--text);font-weight:700;border-color:var(--accent)}
+.menu .dot{width:8px;height:8px;border-radius:50%}
+.menu .soon-tag{font-size:10px;color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:0 4px}
+
+.subtabs{display:flex;gap:6px;margin-bottom:12px}
+.subtabs button{padding:7px 14px;border-radius:10px;border:1px solid var(--line);background:var(--surface);cursor:pointer;font-size:14px;color:var(--muted)}
+.subtabs button.on{background:var(--text);color:var(--bg);border-color:var(--text);font-weight:700}
+.cats{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:12px;scrollbar-width:none}
+.cats button{white-space:nowrap;padding:6px 12px;border-radius:99px;border:1px solid var(--line);background:var(--surface);cursor:pointer;font-size:13px;color:var(--muted)}
+.cats button small{margin-left:4px;opacity:.7}
+.cats button.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);min-width:0}
+.list{display:grid;grid-template-columns:minmax(0,1fr);gap:8px}
+.item{padding:12px 16px;cursor:pointer}
+.top{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .rank{width:26px;font-weight:900;color:var(--muted);text-align:center;flex:none}
-.trend:nth-child(-n+3) .rank{color:var(--hot)}
+.item.r1 .rank,.item.r2 .rank,.item.r3 .rank{color:var(--hot)}
 .kw{font-weight:700;font-size:16px}
+.cat{font-size:11px;padding:2px 7px;border-radius:6px;background:var(--surface-2);color:var(--muted);white-space:nowrap}
 .badge{font-size:11px;font-weight:700;padding:2px 7px;border-radius:6px;white-space:nowrap}
 .b-new{background:color-mix(in srgb,var(--hot) 15%,transparent);color:var(--hot)}
 .b-streak{background:var(--accent-soft);color:var(--accent)}
-.traffic{margin-left:auto;color:var(--muted);font-size:13px;white-space:nowrap}
-.vol{font-size:12px;color:var(--naver);white-space:nowrap}
+.pf{font-size:11px;font-weight:700;padding:2px 6px;border-radius:5px;color:#fff;white-space:nowrap}
+.pf.google{background:var(--google)} .pf.naver{background:var(--naver)} .pf.youtube{background:var(--youtube)}
+.right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.score{font-weight:900;font-size:15px}
+.score small{font-weight:400;color:var(--muted);font-size:11px;margin-left:2px}
+.muted{color:var(--muted);font-size:13px}
 .blog{font-size:12px;color:var(--muted);white-space:nowrap}
 .blog.low{color:var(--naver);font-weight:700}
-.up{font-size:13px;font-weight:700;color:var(--hot);white-space:nowrap;margin-left:auto}
-.news{color:var(--muted);font-size:13px;margin:4px 0 0 38px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.detail{display:none;margin:12px 0 2px 38px}
-.trend.open .detail{display:block}
+.up{font-size:13px;font-weight:700;color:var(--hot);white-space:nowrap}
+.news1{color:var(--muted);font-size:13px;margin:3px 0 0 36px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.detail{display:none;margin:12px 0 2px 36px;cursor:default}
+.item.open .detail{display:block}
+.signals{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;font-size:12px}
+.signals span{padding:3px 8px;border-radius:6px;background:var(--surface-2)}
+.signals b{margin-left:4px}
 .cols{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
 .col h4{margin:0 0 6px;font-size:12px;font-weight:700}
 .col.g h4{color:var(--google)} .col.y h4{color:var(--youtube)} .col.n h4{color:var(--naver)}
 .tags{display:flex;flex-wrap:wrap;gap:5px}
-.tag{font:inherit;font-size:13px;padding:4px 9px;border-radius:8px;background:var(--surface-2);border:1px solid transparent;color:var(--text);cursor:pointer}
+.tag{font-size:13px;padding:4px 9px;border-radius:8px;background:var(--surface-2);border:1px solid transparent;cursor:pointer}
 .tag:hover{border-color:var(--accent);color:var(--accent)}
-.tag small{color:var(--muted);margin-left:3px}
 .newslinks{margin-top:10px;font-size:13px}
 .newslinks a{display:block;color:var(--muted);text-decoration:none;padding:2px 0}
 .newslinks a:hover{color:var(--accent)}
 .spark{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12px;color:var(--muted)}
 .empty{padding:22px;color:var(--muted);font-size:14px}
 .empty b{color:var(--text)}
-.seed-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:10px}
-.seed{padding:14px 16px}
-.seed .kw{display:block;margin-bottom:8px}
-.yt-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin-top:12px}
+.intro{margin-bottom:10px}
+.group-h{font-size:14px;font-weight:700;margin:18px 0 8px;color:var(--muted)}
+
+.logic{padding:14px 18px;margin-bottom:12px;font-size:14px}
+.logic summary{cursor:pointer;font-weight:700}
+.logic ol{margin:10px 0 4px;padding-left:20px}
+.logic li{margin:4px 0}
+.logic .ex{color:var(--muted);font-size:13px}
+
+.yt-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
 .yt{display:flex;gap:10px;padding:10px;text-decoration:none}
 .yt img{width:96px;height:54px;object-fit:cover;border-radius:6px;flex:none;background:var(--surface-2)}
 .yt .t{font-size:13px;font-weight:500;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .yt .c{font-size:12px;color:var(--muted)}
-.cat-tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:10px;scrollbar-width:none}
-.cat-tabs button{font:inherit;font-size:13px;white-space:nowrap;padding:6px 12px;border-radius:99px;border:1px solid var(--line);background:var(--surface);color:var(--muted);cursor:pointer}
-.cat-tabs button.on{background:var(--naver);border-color:var(--naver);color:#fff;font-weight:700}
-#yt-tabs button.on{background:var(--youtube);border-color:var(--youtube)}
-.shop{padding:6px 0}
-.shop-row{display:flex;align-items:center;gap:10px;padding:8px 16px;border-top:1px solid var(--line);cursor:pointer}
-.shop-item:first-child .shop-row{border-top:0}
-.shop-row .rank{width:22px}
-.shop-item:nth-child(-n+3) .rank{color:var(--naver)}
-.shop-item .detail{margin:0 16px 12px 48px}
-.shop-item.open .detail{display:block}
-.soon{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
-.soon .card{padding:14px 16px;font-size:13px;color:var(--muted)}
-.soon b{display:block;color:var(--text);font-size:15px;margin-bottom:4px}
+.soon{padding:28px;text-align:center}
+.soon h3{margin:0 0 8px}
+.soon p{margin:4px 0;color:var(--muted);font-size:14px}
+
 .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);opacity:0;background:var(--text);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px;transition:.2s;pointer-events:none}
 .toast.show{opacity:1;transform:translateX(-50%)}
 footer{color:var(--muted);font-size:12px;text-align:center;margin-top:40px}
 @media (max-width:720px){
-  h1{font-size:23px} input[type=search]{width:100%} .controls{width:100%} .controls>*{flex:1}
-  .cols{grid-template-columns:1fr} .detail,.news{margin-left:0} .shop-item .detail{margin:0 16px 12px} .traffic{display:none}
-  .seed-grid{grid-template-columns:1fr}
+  h1{font-size:22px} .controls{width:100%} .controls>*{flex:1} input[type=search]{width:auto}
+  .cols{grid-template-columns:1fr} .detail,.news1{margin-left:0}
+  .right{margin-left:36px;width:100%}
 }
 </style>
 </head>
@@ -123,88 +132,45 @@ footer{color:var(--muted);font-size:12px;text-align:center;margin-top:40px}
       <select id="date" aria-label="날짜 선택"></select>
     </div>
   </header>
-  <div class="chips" id="status"></div>
-
-  <section>
-    <div class="sec-h"><h2>🔥 오늘의 급상승 검색어</h2><span class="hint">구글 기준 · 누르면 플랫폼별 연관 검색어</span></div>
-    <div class="trend-list" id="trends"></div>
-  </section>
-
-  <section>
-    <div class="sec-h"><h2>📈 네이버 급상승 검색어</h2><span class="hint">최근 3일 검색량이 그 전 4주보다 크게 오른 키워드 · 블로그 글 수가 적을수록 쓰기 좋아요</span></div>
-    <div class="trend-list" id="nrising"></div>
-  </section>
-
-  <section>
-    <div class="sec-h"><h2>🛒 네이버 쇼핑 인기 검색어</h2><span class="hint" id="shop-hint">분야별 TOP 20</span></div>
-    <div class="cat-tabs" id="cat-tabs"></div>
-    <div class="card shop" id="shop"></div>
-  </section>
-
-  <section>
-    <div class="sec-h"><h2>▶️ 유튜브 인기 키워드</h2><span class="hint">한국 인기 동영상 · 숫자는 그 키워드가 나온 영상 수</span></div>
-    <div id="youtube"></div>
-  </section>
-
-  <section>
-    <div class="sec-h"><h2>📌 우리 팀 관심 키워드</h2><span class="hint">매일 바뀌는 연관 검색어로 글감 찾기</span></div>
-    <div class="seed-grid" id="seeds"></div>
-  </section>
-
-  <section>
-    <div class="sec-h"><h2>🛠 곧 추가될 플랫폼</h2></div>
-    <div class="soon">
-      <div class="card"><b>틱톡</b>Creative Center 트렌드가 로그인 필수로 바뀌어 틱톡 비즈니스 계정이 필요해요.</div>
-      <div class="card"><b>인스타그램</b>Meta 앱 심사 후 지정한 해시태그의 인기 게시물을 볼 수 있어요.</div>
-      <div class="card"><b>스레드</b>Meta 앱 심사 후 키워드별 언급량을 볼 수 있어요.</div>
-    </div>
-  </section>
-
-  <footer>키워드를 누르면 복사돼요 · 데이터는 3시간마다 갱신</footer>
+  <nav><div class="menu" id="menu"></div></nav>
+  <main id="page"></main>
+  <footer>키워드를 누르면 자세히, 칩을 누르면 복사 · 매일 00·06·12·18시 갱신</footer>
 </div>
 <div class="toast" id="toast"></div>
 
 <script>
 const $ = (s) => document.querySelector(s);
 const esc = (s = '') => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-let data = null;
-let shopCat = null;
-let ytCat = null;
+const fmt = (n) => n >= 10000 ? (n / 10000).toFixed(n >= 100000 ? 0 : 1) + '만' : n.toLocaleString();
+const norm = (k) => k.replace(/\s+/g, '').toLowerCase();
 
+const PAGES = [
+  { id: 'all', name: '통합', color: 'var(--accent)' },
+  { id: 'google', name: '구글', color: 'var(--google)' },
+  { id: 'naver', name: '네이버', color: 'var(--naver)' },
+  { id: 'youtube', name: '유튜브', color: 'var(--youtube)' },
+  { id: 'tiktok', name: '틱톡', soon: true },
+  { id: 'instagram', name: '인스타', soon: true },
+  { id: 'threads', name: '스레드', soon: true },
+];
+const PF_NAME = { google: '구글', naver: '네이버', youtube: '유튜브' };
+const st = { page: 'all', sub: {}, cat: '전체', q: '' };
+let data = null;
+let catOf = new Map();
+
+// ── 공통 조각 ────────────────────────────────────────────────
 function toast(msg) {
   const t = $('#toast'); t.textContent = msg; t.classList.add('show');
   clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('show'), 1400);
 }
-document.addEventListener('click', (e) => {
-  const tag = e.target.closest('[data-copy]');
-  if (tag) {
-    e.stopPropagation();
-    navigator.clipboard?.writeText(tag.dataset.copy).then(() => toast(`"${tag.dataset.copy}" 복사됨`));
-    return;
-  }
-  const yt = e.target.closest('[data-ytcat]');
-  if (yt) { ytCat = yt.dataset.ytcat; render(); return; }
-  const tab = e.target.closest('[data-cat]');
-  if (tab) { shopCat = tab.dataset.cat; render(); return; }
-  const si = e.target.closest('.shop-item');
-  if (si && !e.target.closest('a')) { si.classList.toggle('open'); return; }
-  const tr = e.target.closest('.trend');
-  if (tr && !e.target.closest('a')) tr.classList.toggle('open');
-});
-
-const fmt = (n) => n >= 10000 ? (n / 10000).toFixed(n >= 100000 ? 0 : 1) + '만' : n.toLocaleString();
-const tagBtn = (k, extra = '') => `<button class="tag" data-copy="${esc(k)}">${esc(k)}${extra}</button>`;
-
-function volumeOf(k) {
-  const v = data.naver?.searchad?.[k.replace(/\s+/g, '')];
-  return v ? v.pc + v.mobile : null;
-}
+const tagBtn = (k) => `<button class="tag" data-copy="${esc(k)}">${esc(k)}</button>`;
 function blogOf(k) {
   const n = data.naver?.blog?.[k];
   if (n == null) return '';
-  return `<span class="blog ${n < 1000 ? 'low' : ''}" title="네이버 블로그 글 수">블로그 ${fmt(n)}</span>`;
+  return `<span class="blog ${n < 1000 ? 'low' : ''}" title="네이버 블로그 글 수 (적을수록 경쟁이 약해요)">블로그 ${fmt(n)}</span>`;
 }
-function spark(arr) {
+function spark(k) {
+  const arr = data.naver?.datalab?.[k];
   if (!arr?.length) return '';
   const w = 160, h = 28, max = Math.max(...arr, 1);
   const pts = arr.map((v, i) => `${(i / (arr.length - 1)) * w},${h - (v / max) * h}`).join(' ');
@@ -212,118 +178,182 @@ function spark(arr) {
 }
 function suggestCols(k) {
   const s = data.suggestions?.[k];
-  if (!s) return '<div class="hint">연관 검색어 없음</div>';
-  const col = (cls, name, list) => `<div class="col ${cls}"><h4>${name}</h4><div class="tags">${
-    list?.length ? list.map((x) => tagBtn(x)).join('') : '<span class="hint">없음</span>'}</div></div>`;
+  if (!s) return '';
+  const col = (cls, name, list) => `<div class="col ${cls}"><h4>${name} 연관 검색어</h4><div class="tags">${
+    list?.length ? list.map(tagBtn).join('') : '<span class="muted">없음</span>'}</div></div>`;
   return `<div class="cols">${col('g', '구글', s.google)}${col('y', '유튜브', s.youtube)}${col('n', '네이버', s.naver)}</div>`;
 }
-const match = (k, q) => !q || k.toLowerCase().includes(q) ||
-  Object.values(data.suggestions?.[k] || {}).flat().some((x) => x.toLowerCase().includes(q));
-
-function render() {
-  const q = $('#q').value.trim().toLowerCase();
-  const S = data.sources || {};
-  $('#sub').textContent = `${data.date} · ${new Date(data.generatedAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} 업데이트`;
-  const chip = (on, label) => `<span class="status ${on ? 'on' : 'off'}">${label}</span>`;
-  $('#status').innerHTML = [
-    chip(S.google, '구글 급상승'), chip(S.naverShopping, '네이버 쇼핑'), chip(true, '연관 검색어 (구글·유튜브·네이버)'),
-    chip(S.youtube, '유튜브 인기'), chip(S.naverSearchAd, '네이버 검색량'), chip(S.naverDatalab, '네이버 급상승·추이'), chip(S.naverBlog, '블로그 글 수'),
-    chip(false, '틱톡'), chip(false, '인스타'), chip(false, '스레드'),
-  ].join('');
-
-  const trends = (data.google || []).filter((t) => match(t.keyword, q));
-  $('#trends').innerHTML = trends.length ? trends.map((t, i) => {
-    const vol = volumeOf(t.keyword);
-    return `<div class="card trend">
-      <div class="trend-top">
-        <span class="rank">${i + 1}</span>
-        <span class="kw">${esc(t.keyword)}</span>
-        ${t.isNew ? '<span class="badge b-new">NEW</span>' : `<span class="badge b-streak">${t.streak}일째</span>`}
-        ${vol != null ? `<span class="vol">월 ${fmt(vol)}회</span>` : ''}${blogOf(t.keyword)}
-        <span class="traffic">검색 ${esc(t.traffic)}</span>
-      </div>
-      ${t.news?.[0] ? `<div class="news">${esc(t.news[0].title)}</div>` : ''}
-      <div class="detail">
-        ${suggestCols(t.keyword)}
-        ${spark(data.naver?.datalab?.[t.keyword])}
-        ${t.news?.length ? `<div class="newslinks">${t.news.map((n) => `<a href="${esc(n.url)}" target="_blank" rel="noopener">📰 ${esc(n.title)} <small>· ${esc(n.source)}</small></a>`).join('')}</div>` : ''}
-      </div>
-    </div>`;
-  }).join('') : `<div class="card empty">${q ? '검색 결과가 없어요.' : '아직 수집된 급상승 검색어가 없어요.'}</div>`;
-
-  const rising = data.naver?.rising;
-  if (rising) {
-    const rows = rising.filter((r) => match(r.keyword, q));
-    $('#nrising').innerHTML = rows.length ? rows.map((r, i) => `<div class="card trend">
-      <div class="trend-top">
-        <span class="rank">${i + 1}</span><span class="kw">${esc(r.keyword)}</span>${blogOf(r.keyword)}
-        <span class="up">▲ ${Math.round((r.score - 1) * 100)}%</span>
-      </div>
-      <div class="detail">${suggestCols(r.keyword)}${spark(data.naver?.datalab?.[r.keyword])}</div>
-    </div>`).join('') : `<div class="card empty">${q ? '검색 결과가 없어요.' : '오늘은 크게 오른 키워드가 없어요.'}</div>`;
-  } else {
-    $('#nrising').innerHTML = '<div class="card empty"><b>네이버 API HUB 키를 연결하면 열려요.</b></div>';
-  }
-
-  const shop = data.naverShopping;
-  if (shop?.categories?.length) {
-    if (!shop.categories.some((c) => c.cid === shopCat)) shopCat = shop.categories[0].cid;
-    $('#shop-hint').textContent = `${shop.day} 하루 기준 · 분야별 TOP 20 · 누르면 연관 검색어`;
-    $('#cat-tabs').innerHTML = shop.categories.map((c) => `<button data-cat="${c.cid}" class="${c.cid === shopCat ? 'on' : ''}">${esc(c.name)}</button>`).join('');
-    const c = shop.categories.find((x) => x.cid === shopCat);
-    const newOnes = new Set(c.newOnes || []);
-    const rows = c.keywords.map((k, i) => [k, i]).filter(([k]) => match(k, q));
-    $('#shop').innerHTML = rows.length ? rows.map(([k, i]) => {
-      const vol = volumeOf(k);
-      return `<div class="shop-item"><div class="shop-row"><span class="rank">${i + 1}</span><span class="kw" style="font-size:15px">${esc(k)}</span>
-        ${newOnes.has(k) ? '<span class="badge b-new">NEW</span>' : ''}${vol != null ? `<span class="vol">월 ${fmt(vol)}회</span>` : ''}${blogOf(k)}</div>
-        <div class="detail">${data.suggestions?.[k] ? suggestCols(k) : `<div class="tags">${tagBtn(k)}</div>`}${spark(data.naver?.datalab?.[k])}</div></div>`;
-    }).join('') : '<div class="empty">검색 결과가 없어요.</div>';
-  } else {
-    $('#cat-tabs').innerHTML = '';
-    $('#shop').innerHTML = '<div class="empty">이 날짜에는 네이버 쇼핑 데이터가 없어요.</div>';
-  }
-
-  const yt = data.youtube;
-  if (yt) {
-    const cats = yt.categories?.length ? yt.categories : [{ cid: '0', name: '전체', videos: yt.videos }];
-    if (!cats.some((c) => c.cid === ytCat)) ytCat = cats[0].cid;
-    const cat = cats.find((c) => c.cid === ytCat);
-    const vids = cat.videos.filter((v) => !q || v.title.toLowerCase().includes(q) || v.tags.some((t) => t.toLowerCase().includes(q)));
-    $('#youtube').innerHTML = `
-      <div class="card" style="padding:14px 16px;margin-bottom:12px"><div class="tags">${yt.keywords.filter((k) => match(k.keyword, q)).map((k) => tagBtn(k.keyword, k.count > 1 ? `<small>${k.count}</small>` : '')).join('')}</div></div>
-      <div class="cat-tabs" id="yt-tabs">${cats.map((c) => `<button data-ytcat="${c.cid}" class="${c.cid === ytCat ? 'on' : ''}">${esc(c.name)}</button>`).join('')}</div>
-      <div class="yt-grid" style="margin-top:0">${vids.length ? vids.map((v, i) => `
-        <a class="card yt" href="https://youtu.be/${v.id}" target="_blank" rel="noopener">
-          <img src="${esc(v.thumb)}" alt="" loading="lazy"><div><div class="t">${i + 1}. ${esc(v.title)}</div><div class="c">${esc(v.channel)} · 조회 ${fmt(v.views)}</div></div>
-        </a>`).join('') : '<div class="card empty">검색 결과가 없어요.</div>'}</div>`;
-  } else {
-    $('#youtube').innerHTML = `<div class="card empty"><b>유튜브 API 키를 연결하면 열려요.</b> 지금은 위 급상승 키워드마다 유튜브 연관 검색어를 보여 드려요.</div>`;
-  }
-
-  const seeds = (data.seeds || []).filter((k) => match(k, q));
-  $('#seeds').innerHTML = seeds.length ? seeds.map((k) => {
-    const vol = volumeOf(k);
-    return `<div class="card seed"><span class="kw">${esc(k)} ${vol != null ? `<span class="vol">월 ${fmt(vol)}회</span>` : ''}</span>${suggestCols(k)}</div>`;
-  }).join('') : '<div class="card empty">해당하는 관심 키워드가 없어요.</div>';
+const newsOf = (k) => (data.google || []).find((t) => norm(t.keyword) === norm(k))?.news || [];
+function newsLinks(k) {
+  const news = newsOf(k);
+  return news.length ? `<div class="newslinks">${news.map((n) => `<a href="${esc(n.url)}" target="_blank" rel="noopener">📰 ${esc(n.title)} <small>· ${esc(n.source)}</small></a>`).join('')}</div>` : '';
 }
+const detail = (k, pre = '') => `<div class="detail">${pre}${suggestCols(k)}${spark(k)}${newsLinks(k)}</div>`;
+const catTag = (k, c) => `<span class="cat">${esc(c || catOf.get(norm(k)) || '기타')}</span>`;
+function row({ i, k, cat, badges = '', right = '', sub = '', pre = '' }) {
+  return `<div class="card item r${i + 1}">
+    <div class="top"><span class="rank">${i + 1}</span><span class="kw">${esc(k)}</span>${catTag(k, cat)}${badges}
+      <div class="right">${blogOf(k)}${right}</div></div>
+    ${sub}${detail(k, pre)}
+  </div>`;
+}
+const matchQ = (k) => !st.q || norm(k).includes(norm(st.q)) ||
+  Object.values(data.suggestions?.[k] || {}).flat().some((x) => norm(x).includes(norm(st.q)));
+const empty = (msg) => `<div class="card empty">${msg}</div>`;
+const intro = (t) => `<div class="muted intro">${t}</div>`;
+
+// 분야 칩: 지금 목록에 있는 분야만, 개수와 함께
+function catBar(items, getCat) {
+  const counts = {};
+  for (const it of items) { const c = getCat(it); counts[c] = (counts[c] || 0) + 1; }
+  const order = (data.categories || []).filter((c) => counts[c]);
+  if (st.cat !== '전체' && !counts[st.cat]) st.cat = '전체';
+  return `<div class="cats">${[['전체', items.length], ...order.map((c) => [c, counts[c]])]
+    .map(([c, n]) => `<button data-cat="${esc(c)}" class="${st.cat === c ? 'on' : ''}">${esc(c)}<small>${n}</small></button>`).join('')}</div>`;
+}
+const byCat = (getCat) => (it) => st.cat === '전체' || getCat(it) === st.cat;
+function subtabs(page, tabs) {
+  const cur = st.sub[page] || tabs[0][0];
+  return { cur, html: `<div class="subtabs">${tabs.map(([id, name]) => `<button data-sub="${id}" class="${cur === id ? 'on' : ''}">${name}</button>`).join('')}</div>` };
+}
+const listOr = (rows, msg = '해당하는 키워드가 없어요.') => rows.length ? `<div class="list">${rows.join('')}</div>` : empty(msg);
+
+// ── 페이지 ──────────────────────────────────────────────────
+const LOGIC = `<details class="card logic"><summary>통합 순위는 이렇게 매겨요</summary>
+  <ol>
+    <li><b>플랫폼별 점수</b>: 구글 급상승, 네이버 급상승, 유튜브 인기 키워드에서 1위면 100점, 순위가 내려갈수록 점수가 줄어요.</li>
+    <li><b>네이버 쇼핑</b>: 분야가 10개라 1위가 10개나 나와서 70%만 쳐줘요 (분야 1위 = 70점).</li>
+    <li><b>한 플랫폼에서는 가장 높은 점수 하나만</b> 세요. 네이버 급상승과 쇼핑에 둘 다 있어도 더 높은 쪽만 들어가요.</li>
+    <li><b>여러 플랫폼에 동시에 뜨면 보너스</b>: 플랫폼이 하나 늘 때마다 +50점. 여기저기서 동시에 뜨는 키워드가 진짜 대세라서요.</li>
+  </ol>
+  <div class="ex">키워드를 누르면 점수가 어디서 왔는지 볼 수 있어요.</div>
+</details>`;
+
+function pageAll() {
+  const items = (data.unified || []).filter((u) => matchQ(u.keyword));
+  const getCat = (u) => u.category;
+  const list = items.filter(byCat(getCat)).slice(0, 100);
+  return LOGIC + catBar(items, getCat) + listOr(list.map((u, i) => row({
+    i, k: u.keyword, cat: u.category,
+    badges: u.platforms.map((p) => `<span class="pf ${p}">${PF_NAME[p]}</span>`).join(''),
+    right: `<span class="score">${u.score}<small>점</small></span>`,
+    pre: `<div class="signals">${u.signals.map((s) => `<span>${esc(s.label)}<b>${s.points}점</b></span>`).join('')}${
+      u.platforms.length > 1 ? `<span>${u.platforms.length}개 플랫폼 보너스<b>+${50 * (u.platforms.length - 1)}점</b></span>` : ''}</div>`,
+  })));
+}
+
+function pageGoogle() {
+  const items = (data.google || []).filter((t) => matchQ(t.keyword));
+  const getCat = (t) => t.category || '기타';
+  return intro('구글에서 지금 검색이 급증한 키워드 · 하루 동안 누적') + catBar(items, getCat) +
+    listOr(items.filter(byCat(getCat)).map((t, i) => row({
+      i, k: t.keyword, cat: getCat(t),
+      badges: t.isNew ? '<span class="badge b-new">NEW</span>' : `<span class="badge b-streak">${t.streak}일째</span>`,
+      right: `<span class="muted">검색 ${esc(t.traffic)}</span>`,
+      sub: t.news?.[0] ? `<div class="news1">${esc(t.news[0].title)}</div>` : '',
+    })));
+}
+
+function pageNaver() {
+  const { cur, html } = subtabs('naver', [['rising', '📈 급상승'], ['shopping', '🛒 쇼핑 인기']]);
+  if (cur === 'rising') {
+    const rising = data.naver?.rising;
+    if (!rising) return html + empty('<b>네이버 키가 연결되지 않았어요.</b>');
+    const items = rising.filter((r) => matchQ(r.keyword));
+    const getCat = (r) => r.category || '기타';
+    return html + intro('최근 3일 검색량이 그 전 4주 평균보다 50% 이상 오른 키워드 · 블로그 글 수가 적을수록(초록색) 쓰기 좋아요') +
+      catBar(items, getCat) + listOr(items.filter(byCat(getCat)).map((r, i) => row({
+        i, k: r.keyword, cat: getCat(r), right: `<span class="up">▲ ${Math.round((r.score - 1) * 100)}%</span>`,
+      })));
+  }
+  const shop = data.naverShopping;
+  if (!shop?.categories?.length) return html + empty('이 날짜에는 네이버 쇼핑 데이터가 없어요.');
+  const groups = shop.categories.map((c) => ({ ...c, cat: c.category || '기타', kws: c.keywords.filter(matchQ), fresh: new Set(c.newOnes || []) }));
+  const all = groups.flatMap((g) => g.kws.map(() => g));
+  const shown = groups.filter((g) => g.kws.length && (st.cat === '전체' || g.cat === st.cat));
+  return html + intro(`${shop.day} 하루 동안 네이버 쇼핑에서 많이 찾은 키워드 · 분야별 TOP 20`) + catBar(all, (g) => g.cat) +
+    (shown.length ? shown.map((g) => `<div class="group-h">${esc(g.name)}</div>` + listOr(g.kws.map((k) => row({
+      i: g.keywords.indexOf(k), k, cat: g.cat, badges: g.fresh.has(k) ? '<span class="badge b-new">NEW</span>' : '',
+    })))).join('') : empty('해당하는 키워드가 없어요.'));
+}
+
+function pageYoutube() {
+  const yt = data.youtube;
+  const { cur, html } = subtabs('youtube', [['keywords', '🔑 인기 키워드'], ['videos', '▶️ 인기 영상']]);
+  if (!yt) return html + empty('<b>유튜브 키가 연결되지 않았어요.</b>');
+  if (cur === 'keywords') {
+    const items = yt.keywords.filter((k) => matchQ(k.keyword));
+    const getCat = (k) => k.category || '기타';
+    return html + intro('한국 인기 동영상의 태그와 제목에서 많이 나온 키워드') + catBar(items, getCat) +
+      listOr(items.filter(byCat(getCat)).map((k, i) => row({
+        i, k: k.keyword, cat: getCat(k), right: `<span class="muted">인기 영상 ${k.count}개</span>`,
+      })));
+  }
+  const seen = new Map();
+  for (const c of yt.categories || [{ videos: yt.videos }]) for (const v of c.videos) if (!seen.has(v.id)) seen.set(v.id, v);
+  const q = norm(st.q);
+  const items = [...seen.values()].filter((v) => !q || norm(v.title).includes(q) || v.tags.some((t) => norm(t).includes(q)));
+  const getCat = (v) => v.category || '기타';
+  const list = items.filter(byCat(getCat)).sort((a, b) => b.views - a.views);
+  return html + intro('한국 인기 동영상 · 조회수 순') + catBar(items, getCat) + (list.length ? `<div class="yt-grid">${list.map((v) => `
+    <a class="card yt" href="https://youtu.be/${v.id}" target="_blank" rel="noopener">
+      <img src="${esc(v.thumb)}" alt="" loading="lazy"><div><div class="t">${esc(v.title)}</div><div class="c">${esc(v.channel)} · 조회 ${fmt(v.views)}</div></div>
+    </a>`).join('')}</div>` : empty('해당하는 영상이 없어요.'));
+}
+
+const SOON = {
+  tiktok: ['틱톡', '틱톡 트렌드(Creative Center)가 로그인 필수로 바뀌어 틱톡 비즈니스 계정이나 외부 수집 서비스(Apify 등)가 필요해요.'],
+  instagram: ['인스타그램', '인스타는 공식 API에 트렌드 목록이 없어요. 비즈니스 계정 + Meta 앱 심사 후 지정한 해시태그의 인기 게시물만 볼 수 있어요.'],
+  threads: ['스레드', '스레드도 트렌드 목록 API가 없어요. Meta 앱 심사 후 지정한 키워드의 언급 게시물을 볼 수 있어요.'],
+};
+const pageSoon = (id) => `<div class="card soon"><h3>${SOON[id][0]}은 준비 중이에요</h3><p>${SOON[id][1]}</p></div>`;
+
+// ── 렌더링 ──────────────────────────────────────────────────
+function render() {
+  $('#menu').innerHTML = PAGES.map((p) => `<a href="#${p.id}" class="${st.page === p.id ? 'on' : ''}">${
+    p.color ? `<span class="dot" style="background:${p.color}"></span>` : ''}${p.name}${p.soon ? '<span class="soon-tag">준비 중</span>' : ''}</a>`).join('');
+  const fn = { all: pageAll, google: pageGoogle, naver: pageNaver, youtube: pageYoutube }[st.page];
+  $('#page').innerHTML = fn ? fn() : pageSoon(st.page);
+}
+
+document.addEventListener('click', (e) => {
+  const copy = e.target.closest('[data-copy]');
+  if (copy) {
+    navigator.clipboard?.writeText(copy.dataset.copy).then(() => toast(`"${copy.dataset.copy}" 복사됨`));
+    return;
+  }
+  const c = e.target.closest('[data-cat]');
+  if (c) { st.cat = c.dataset.cat; render(); return; }
+  const s = e.target.closest('[data-sub]');
+  if (s) { st.sub[st.page] = s.dataset.sub; st.cat = '전체'; render(); return; }
+  if (e.target.closest('.detail, a, summary')) return;
+  e.target.closest('.item')?.classList.toggle('open');
+});
+function route() {
+  const id = location.hash.slice(1);
+  st.page = PAGES.some((p) => p.id === id) ? id : 'all';
+  st.cat = '전체';
+  if (data) render();
+}
+window.addEventListener('hashchange', route);
 
 async function load(date) {
-  const url = date ? `data/history/${date}.json` : 'data/latest.json';
-  data = await (await fetch(url, { cache: 'no-cache' })).json();
+  data = await (await fetch(date ? `data/history/${date}.json` : 'data/latest.json', { cache: 'no-cache' })).json();
+  catOf = new Map((data.unified || []).map((u) => [norm(u.keyword), u.category]));
+  $('#sub').textContent = `${data.date} · ${new Date(data.generatedAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} 업데이트`;
   render();
 }
-
 (async () => {
+  route();
   try {
     const { dates } = await (await fetch('data/index.json', { cache: 'no-cache' })).json();
     $('#date').innerHTML = dates.slice().reverse().map((d, i) => `<option value="${i ? d : ''}">${d}${i ? '' : ' (오늘)'}</option>`).join('');
     await load('');
-  } catch (e) {
+  } catch {
     $('#sub').textContent = '데이터를 불러오지 못했어요.';
   }
   $('#date').onchange = (e) => load(e.target.value);
-  $('#q').oninput = () => data && render();
+  $('#q').oninput = (e) => { st.q = e.target.value.trim(); data && render(); };
 })();
 </script>
 </body>
