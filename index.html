@@ -87,6 +87,7 @@ section{margin-bottom:36px}
 .cat-tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:10px;scrollbar-width:none}
 .cat-tabs button{font:inherit;font-size:13px;white-space:nowrap;padding:6px 12px;border-radius:99px;border:1px solid var(--line);background:var(--surface);color:var(--muted);cursor:pointer}
 .cat-tabs button.on{background:var(--naver);border-color:var(--naver);color:#fff;font-weight:700}
+#yt-tabs button.on{background:var(--youtube);border-color:var(--youtube)}
 .shop{padding:6px 0}
 .shop-row{display:flex;align-items:center;gap:10px;padding:8px 16px;border-top:1px solid var(--line);cursor:pointer}
 .shop-item:first-child .shop-row{border-top:0}
@@ -133,7 +134,7 @@ footer{color:var(--muted);font-size:12px;text-align:center;margin-top:40px}
   </section>
 
   <section>
-    <div class="sec-h"><h2>▶️ 유튜브 인기 키워드</h2><span class="hint">한국 인기 동영상 태그 집계</span></div>
+    <div class="sec-h"><h2>▶️ 유튜브 인기 키워드</h2><span class="hint">한국 인기 동영상 · 숫자는 그 키워드가 나온 영상 수</span></div>
     <div id="youtube"></div>
   </section>
 
@@ -160,6 +161,7 @@ const $ = (s) => document.querySelector(s);
 const esc = (s = '') => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 let data = null;
 let shopCat = null;
+let ytCat = null;
 
 function toast(msg) {
   const t = $('#toast'); t.textContent = msg; t.classList.add('show');
@@ -172,6 +174,8 @@ document.addEventListener('click', (e) => {
     navigator.clipboard?.writeText(tag.dataset.copy).then(() => toast(`"${tag.dataset.copy}" 복사됨`));
     return;
   }
+  const yt = e.target.closest('[data-ytcat]');
+  if (yt) { ytCat = yt.dataset.ytcat; render(); return; }
   const tab = e.target.closest('[data-cat]');
   if (tab) { shopCat = tab.dataset.cat; render(); return; }
   const si = e.target.closest('.shop-item');
@@ -254,13 +258,21 @@ function render() {
   }
 
   const yt = data.youtube;
-  $('#youtube').innerHTML = yt ? `
-    <div class="card" style="padding:14px 16px"><div class="tags">${yt.keywords.filter((k) => match(k.keyword, q)).map((k) => tagBtn(k.keyword, `<small>${k.count}</small>`)).join('')}</div></div>
-    <div class="yt-grid">${yt.videos.filter((v) => !q || v.title.toLowerCase().includes(q) || v.tags.some((t) => t.toLowerCase().includes(q))).slice(0, 12).map((v) => `
-      <a class="card yt" href="https://youtu.be/${v.id}" target="_blank" rel="noopener">
-        <img src="${esc(v.thumb)}" alt="" loading="lazy"><div><div class="t">${esc(v.title)}</div><div class="c">${esc(v.channel)} · 조회 ${fmt(v.views)}</div></div>
-      </a>`).join('')}</div>`
-    : `<div class="card empty"><b>유튜브 API 키를 연결하면 열려요.</b> 지금은 위 급상승 키워드마다 유튜브 연관 검색어를 보여 드려요.</div>`;
+  if (yt) {
+    const cats = yt.categories?.length ? yt.categories : [{ cid: '0', name: '전체', videos: yt.videos }];
+    if (!cats.some((c) => c.cid === ytCat)) ytCat = cats[0].cid;
+    const cat = cats.find((c) => c.cid === ytCat);
+    const vids = cat.videos.filter((v) => !q || v.title.toLowerCase().includes(q) || v.tags.some((t) => t.toLowerCase().includes(q)));
+    $('#youtube').innerHTML = `
+      <div class="card" style="padding:14px 16px;margin-bottom:12px"><div class="tags">${yt.keywords.filter((k) => match(k.keyword, q)).map((k) => tagBtn(k.keyword, k.count > 1 ? `<small>${k.count}</small>` : '')).join('')}</div></div>
+      <div class="cat-tabs" id="yt-tabs">${cats.map((c) => `<button data-ytcat="${c.cid}" class="${c.cid === ytCat ? 'on' : ''}">${esc(c.name)}</button>`).join('')}</div>
+      <div class="yt-grid" style="margin-top:0">${vids.length ? vids.map((v, i) => `
+        <a class="card yt" href="https://youtu.be/${v.id}" target="_blank" rel="noopener">
+          <img src="${esc(v.thumb)}" alt="" loading="lazy"><div><div class="t">${i + 1}. ${esc(v.title)}</div><div class="c">${esc(v.channel)} · 조회 ${fmt(v.views)}</div></div>
+        </a>`).join('') : '<div class="card empty">검색 결과가 없어요.</div>'}</div>`;
+  } else {
+    $('#youtube').innerHTML = `<div class="card empty"><b>유튜브 API 키를 연결하면 열려요.</b> 지금은 위 급상승 키워드마다 유튜브 연관 검색어를 보여 드려요.</div>`;
+  }
 
   const seeds = (data.seeds || []).filter((k) => match(k, q));
   $('#seeds').innerHTML = seeds.length ? seeds.map((k) => {

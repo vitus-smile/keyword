@@ -97,29 +97,51 @@ async function suggestAll(q) {
   return { google, youtube, naver };
 }
 
-// ── 유튜브 인기 동영상 (키 필요) ─────────────────────────────────
+// ── 유튜브 인기 동영상 (키 필요) — 전체 + 분야별 ──────────────────
+const YT_CATS = { 0: '전체', 10: '음악', 24: '엔터테인먼트', 20: '게임', 17: '스포츠', 25: '뉴스/정치',
+  26: '노하우/스타일', 22: '인물/블로그', 23: '코미디', 1: '영화/애니', 28: '과학기술', 15: '동물' };
+// 제목에서 키워드 후보: 해시태그, [대괄호], '따옴표' 속 말
+function titleTerms(title) {
+  const out = [];
+  for (const m of title.matchAll(/#([^\s#]+)/g)) out.push(m[1]);
+  for (const m of title.matchAll(/[\[【「『<]([^\]】」』>]{2,20})[\]】」』>]/g)) out.push(m[1]);
+  for (const m of title.matchAll(/['‘"“]([^'’"”]{2,20})['’"”]/g)) out.push(m[1]);
+  return out;
+}
 async function youtubeTrending() {
   if (!env.YOUTUBE_API_KEY) return null;
-  const u = `https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics&chart=mostPopular&regionCode=KR&maxResults=50&key=${env.YOUTUBE_API_KEY}`;
-  const j = await (await get(u)).json();
-  const videos = j.items.map((v) => ({
-    id: v.id,
-    title: v.snippet.title,
-    channel: v.snippet.channelTitle,
-    thumb: v.snippet.thumbnails?.medium?.url,
-    views: +v.statistics.viewCount || 0,
-    tags: (v.snippet.tags || []).slice(0, 15),
-  }));
-  // 태그와 제목 해시태그로 키워드 빈도 집계
+  const categories = [];
+  const seen = new Map();
+  for (const [cid, name] of Object.entries(YT_CATS)) {
+    const u = `https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics&chart=mostPopular&regionCode=KR&maxResults=${cid === '0' ? 50 : 20}${cid === '0' ? '' : `&videoCategoryId=${cid}`}&key=${env.YOUTUBE_API_KEY}`;
+    let items;
+    try { items = (await (await get(u)).json()).items || []; } catch { continue; } // 한국에 없는 분야는 건너뜀
+    if (!items.length) continue;
+    const videos = items.map((v) => ({
+      id: v.id,
+      title: v.snippet.title,
+      channel: v.snippet.channelTitle,
+      thumb: v.snippet.thumbnails?.medium?.url,
+      views: +v.statistics.viewCount || 0,
+      tags: (v.snippet.tags || []).slice(0, 15),
+    }));
+    for (const v of videos) seen.set(v.id, v);
+    categories.push({ cid, name, videos });
+  }
+  if (!categories.length) throw new Error('유튜브 인기 동영상 0건');
+
+  // 전 분야 영상의 태그·제목 키워드 빈도 (한 영상에서는 한 번만 셈)
   const freq = new Map();
-  for (const v of videos) {
-    const words = new Set([...v.tags, ...(v.title.match(/#[^\s#]+/g) || []).map((h) => h.slice(1))]
-      .map((w) => w.trim()).filter((w) => w.length >= 2 && w.length <= 20));
+  const skip = /^(shorts?|쇼츠|youtube|유튜브|vlog|브이로그|funny|video|official|mv|m\/v|teaser|예고편|full|ep\.?\d*)$/i;
+  for (const v of seen.values()) {
+    const words = new Set([...v.tags, ...titleTerms(v.title)]
+      .map((w) => w.trim()).filter((w) => w.length >= 2 && w.length <= 20 && !skip.test(w)));
     for (const w of words) freq.set(w, (freq.get(w) || 0) + 1);
   }
-  const keywords = [...freq].filter(([, n]) => n >= 2).sort((a, b) => b[1] - a[1]).slice(0, 40)
+  const sorted = [...freq].sort((a, b) => b[1] - a[1]);
+  const keywords = [...sorted.filter(([, n]) => n >= 2), ...sorted.filter(([, n]) => n < 2)].slice(0, 50)
     .map(([keyword, count]) => ({ keyword, count }));
-  return { videos, keywords };
+  return { videos: categories[0].videos, categories, keywords };
 }
 
 // ── 네이버 데이터랩 검색어 트렌드 (키 필요) — 최근 30일 상대 추이 ──
