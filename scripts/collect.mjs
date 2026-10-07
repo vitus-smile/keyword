@@ -590,6 +590,19 @@ async function writeSeo(snap, dates) {
     urls.map(([p, m, f]) => `  <url><loc>${SITE}${p}</loc><lastmod>${m}</lastmod><changefreq>${f}</changefreq></url>`).join('\n')}\n</urlset>\n`);
 }
 
+// ── IndexNow: 바뀐 페이지를 네이버·빙에 바로 알린다 (구글은 미지원, 사이트맵으로 수집) ──
+// 키 파일은 사이트 루트의 a081b8bd62d44165ee3b1027b75420eb.txt (공개용 값이라 비밀이 아니다)
+const INDEXNOW_KEY = 'a081b8bd62d44165ee3b1027b75420eb';
+async function pingIndexNow(urls) {
+  const body = JSON.stringify({ host: 'keyword.8282ok.com', key: INDEXNOW_KEY, keyLocation: `${SITE}/${INDEXNOW_KEY}.txt`, urlList: urls });
+  for (const ep of ['https://searchadvisor.naver.com/indexnow', 'https://api.indexnow.org/indexnow']) {
+    try {
+      const r = await fetch(ep, { method: 'POST', headers: { 'Content-Type': 'application/json; charset=utf-8' }, body });
+      console.log('IndexNow', new URL(ep).host, r.status);
+    } catch (e) { console.warn('IndexNow 실패', ep, e.message); }
+  }
+}
+
 // ── 실행 ─────────────────────────────────────────────────────────
 async function readJSON(p, fallback) {
   try { return JSON.parse(await readFile(p, 'utf8')); } catch { return fallback; }
@@ -737,6 +750,8 @@ async function main() {
   await writeFile(`${ROOT}data/index.json`, JSON.stringify({ dates }));
 
   await writeSeo(snapshot, dates);
+  // 깃허브 액션에서만 알린다 (배포 전에 알리면 옛 페이지를 가져가므로 몇 분 늦게 수집돼도 괜찮다)
+  if (env.GITHUB_ACTIONS) await pingIndexNow(['/', '/google', '/naver', '/youtube', '/tiktok', '/threads', '/day', `/day/${date}`].map((p) => SITE + p));
 
   console.log(`✔ ${date}: 구글 ${trends.length}개, 유튜브 ${youtube ? youtube.videos.length + '개' : '키 없음'}, ` +
     `연관검색어 ${targets.length}개, 데이터랩 ${datalab ? Object.keys(datalab).length + '개(급상승 ' + rising.length + ')' : '키 없음'}, 블로그 ${blog ? Object.keys(blog).length + '개' : '키 없음'}, 검색광고 ${searchad ? 'O' : '키 없음'}, 쇼핑 ${shopping ? shopping.categories.length + '개 분야' : 'X'}, 틱톡 ${tiktok ? tiktok.hashtags.length + '개' : '키 없음'}, 스레드 ${threads ? Object.keys(threads.counts).length + '개' : '키 없음'}`);
