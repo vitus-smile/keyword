@@ -62,6 +62,13 @@ nav{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid
 .menu .dot{width:8px;height:8px;border-radius:50%}
 .menu .soon-tag{font-size:10px;color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:0 4px}
 
+.sched{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;font-size:13px;color:var(--muted);background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 14px;margin-bottom:12px}
+.sched b{color:var(--text);font-weight:700}
+.sched .stale{color:var(--hot)}
+.sched-table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}
+.sched-table td{padding:6px 4px;border-top:1px solid var(--line)}
+.sched-table td:first-child{font-weight:700;white-space:nowrap}
+.sched-table td:last-child{color:var(--muted);text-align:right;white-space:nowrap}
 .subtabs{display:flex;gap:6px;margin-bottom:12px}
 .subtabs button{padding:7px 14px;border-radius:10px;border:1px solid var(--line);background:var(--surface);cursor:pointer;font-size:14px;color:var(--muted)}
 .subtabs button.on{background:var(--text);color:var(--bg);border-color:var(--text);font-weight:700}
@@ -241,6 +248,34 @@ function subtabs(page, tabs) {
 }
 const listOr = (rows, msg = '해당하는 키워드가 없어요.') => rows.length ? `<div class="list">${rows.join('')}</div>` : empty(msg);
 
+// ── 갱신 일정 ───────────────────────────────────────────────
+// 화면마다 이 데이터가 언제 갱신되는지와 마지막 갱신 시각을 보여준다
+const SCHEDULE = {
+  google: ['구글 급상승', '하루 4번 (00·06·12·18시)', 'google'],
+  naverRising: ['네이버 급상승', '하루 4번 (00·06·12·18시) · 어제까지의 검색 추이 기준', 'naverRising'],
+  naverShopping: ['네이버 쇼핑 인기', '하루 1번 (00시) · 어제 하루 기준', 'naverShopping'],
+  youtube: ['유튜브 인기', '하루 4번 (00·06·12·18시)', 'youtube'],
+  tiktok: ['틱톡 인기 해시태그', '하루 1번 (00시) · 최근 7일 기준', 'tiktok'],
+  threads: ['스레드 반응', '하루 4번 (00·06·12·18시) · 최근 24시간 기준', 'threads'],
+  all: ['통합 순위', '하루 4번 (00·06·12·18시) · 각 플랫폼 데이터를 합쳐 다시 계산', null],
+};
+const fmtTime = (iso) => iso ? new Date(iso).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '아직 없음';
+const lastOf = (key) => key ? data.updated?.[key] : data.generatedAt;
+const staleCls = (iso, hours) => iso && Date.now() - new Date(iso) > hours * 3600e3 ? 'stale' : '';
+function schedBar(key) {
+  const [name, when, src] = SCHEDULE[key];
+  const last = lastOf(src);
+  const limit = /하루 1번/.test(when) ? 26 : 7;
+  return `<div class="sched">🕐 <b>${name}</b><span>갱신: ${when}</span><span class="${staleCls(last, limit)}">마지막 갱신 ${fmtTime(last)}</span></div>`;
+}
+function schedTable() {
+  const rows = ['google', 'naverRising', 'naverShopping', 'youtube', 'tiktok', 'threads'].map((k) => {
+    const [name, when, src] = SCHEDULE[k];
+    return `<tr><td>${name}</td><td>${when}</td><td>${fmtTime(lastOf(src))}</td></tr>`;
+  }).join('');
+  return `<table class="sched-table">${rows}</table>`;
+}
+
 // ── 페이지 ──────────────────────────────────────────────────
 const LOGIC = `<details class="card logic"><summary>통합 순위는 이렇게 매겨요</summary>
   <ol>
@@ -251,12 +286,13 @@ const LOGIC = `<details class="card logic"><summary>통합 순위는 이렇게 �
   </ol>
   <div class="ex">키워드를 누르면 점수가 어디서 왔는지 볼 수 있어요.</div>
 </details>`;
+const SCHED_DETAILS = () => `<details class="card logic"><summary>플랫폼별 갱신 시각</summary>${schedTable()}</details>`;
 
 function pageAll() {
   const items = (data.unified || []).filter((u) => matchQ(u.keyword));
   const getCat = (u) => u.category;
   const list = items.filter(byCat(getCat)).slice(0, 100);
-  return LOGIC + catBar(items, getCat) + listOr(list.map((u, i) => row({
+  return schedBar('all') + LOGIC + SCHED_DETAILS() + catBar(items, getCat) + listOr(list.map((u, i) => row({
     i, k: u.keyword, cat: u.category,
     badges: u.platforms.map((p) => `<span class="pf ${p}">${PF_NAME[p]}</span>`).join(''),
     right: `<span class="score">${u.score}<small>점</small></span>`,
@@ -268,7 +304,7 @@ function pageAll() {
 function pageGoogle() {
   const items = (data.google || []).filter((t) => matchQ(t.keyword));
   const getCat = (t) => t.category || '기타';
-  return intro('구글에서 지금 검색이 급증한 키워드 · 하루 동안 누적') + catBar(items, getCat) +
+  return schedBar('google') + intro('구글에서 지금 검색이 급증한 키워드 · 하루 동안 누적') + catBar(items, getCat) +
     listOr(items.filter(byCat(getCat)).map((t, i) => row({
       i, k: t.keyword, cat: getCat(t),
       badges: t.isNew ? '<span class="badge b-new">NEW</span>' : `<span class="badge b-streak">${t.streak}일째</span>`,
@@ -284,7 +320,7 @@ function pageNaver() {
     if (!rising) return html + empty('<b>네이버 키가 연결되지 않았어요.</b>');
     const items = rising.filter((r) => matchQ(r.keyword));
     const getCat = (r) => r.category || '기타';
-    return html + intro('최근 3일 검색량이 그 전 4주 평균보다 50% 이상 오른 키워드 · 블로그 글 수가 적을수록(초록색) 쓰기 좋아요') +
+    return html + schedBar('naverRising') + intro('최근 3일 검색량이 그 전 4주 평균보다 50% 이상 오른 키워드 · 블로그 글 수가 적을수록(초록색) 쓰기 좋아요') +
       catBar(items, getCat) + listOr(items.filter(byCat(getCat)).map((r, i) => row({
         i, k: r.keyword, cat: getCat(r), right: `<span class="up">▲ ${Math.round((r.score - 1) * 100)}%</span>`,
       })));
@@ -294,7 +330,7 @@ function pageNaver() {
   const groups = shop.categories.map((c) => ({ ...c, cat: c.category || '기타', kws: c.keywords.filter(matchQ), fresh: new Set(c.newOnes || []) }));
   const all = groups.flatMap((g) => g.kws.map(() => g));
   const shown = groups.filter((g) => g.kws.length && (st.cat === '전체' || g.cat === st.cat));
-  return html + intro(`${shop.day} 하루 동안 네이버 쇼핑에서 많이 찾은 키워드 · 분야별 TOP 20`) + catBar(all, (g) => g.cat) +
+  return html + schedBar('naverShopping') + intro(`${shop.day} 하루 동안 네이버 쇼핑에서 많이 찾은 키워드 · 분야별 TOP 20`) + catBar(all, (g) => g.cat) +
     (shown.length ? shown.map((g) => `<div class="group-h">${esc(g.name)}</div>` + listOr(g.kws.map((k) => row({
       i: g.keywords.indexOf(k), k, cat: g.cat, badges: g.fresh.has(k) ? '<span class="badge b-new">NEW</span>' : '',
     })))).join('') : empty('해당하는 키워드가 없어요.'));
@@ -307,7 +343,7 @@ function pageYoutube() {
   if (cur === 'keywords') {
     const items = yt.keywords.filter((k) => matchQ(k.keyword));
     const getCat = (k) => k.category || '기타';
-    return html + intro('한국 인기 동영상의 태그와 제목에서 많이 나온 키워드') + catBar(items, getCat) +
+    return html + schedBar('youtube') + intro('한국 인기 동영상의 태그와 제목에서 많이 나온 키워드') + catBar(items, getCat) +
       listOr(items.filter(byCat(getCat)).map((k, i) => row({
         i, k: k.keyword, cat: getCat(k), right: `<span class="muted">인기 영상 ${k.count}개</span>`,
       })));
@@ -318,7 +354,7 @@ function pageYoutube() {
   const items = [...seen.values()].filter((v) => !q || norm(v.title).includes(q) || v.tags.some((t) => norm(t).includes(q)));
   const getCat = (v) => v.category || '기타';
   const list = items.filter(byCat(getCat)).sort((a, b) => b.views - a.views);
-  return html + intro('한국 인기 동영상 · 조회수 순') + catBar(items, getCat) + (list.length ? `<div class="yt-grid">${list.map((v) => `
+  return html + schedBar('youtube') + intro('한국 인기 동영상 · 조회수 순') + catBar(items, getCat) + (list.length ? `<div class="yt-grid">${list.map((v) => `
     <a class="card yt" href="https://youtu.be/${v.id}" target="_blank" rel="noopener">
       <img src="${esc(v.thumb)}" alt="" loading="lazy"><div><div class="t">${esc(v.title)}</div><div class="c">${esc(v.channel)} · 조회 ${fmt(v.views)}</div></div>
     </a>`).join('')}</div>` : empty('해당하는 영상이 없어요.'));
@@ -326,13 +362,13 @@ function pageYoutube() {
 
 function pageTiktok() {
   const tt = data.tiktok;
-  if (!tt) return empty('<b>틱톡은 매일 첫 갱신(00시) 때 하루 한 번 받아요.</b> 아직 이 날짜의 데이터가 없어요.');
+  if (!tt) return schedBar('tiktok') + empty('<b>틱톡은 매일 첫 갱신(00시) 때 하루 한 번 받아요.</b> 아직 이 날짜의 데이터가 없어요.');
   const items = tt.hashtags.filter((h) => matchQ(h.keyword));
   const getCat = (h) => h.category || '기타';
   const move = (h) => h.prevRank == null ? '<span class="badge b-new">NEW</span>'
     : h.prevRank > h.rank ? `<span class="up">▲${h.prevRank - h.rank}</span>`
     : h.prevRank < h.rank ? `<span class="muted">▼${h.rank - h.prevRank}</span>` : '';
-  return intro('틱톡 Creative Center 한국 인기 해시태그 (최근 7일 기준) · 하루 1번 갱신') + catBar(items, getCat) +
+  return schedBar('tiktok') + intro('틱톡 Creative Center 한국 인기 해시태그 (최근 7일 기준)') + catBar(items, getCat) +
     listOr(items.filter(byCat(getCat)).map((h) => row({
       i: h.rank - 1, k: h.keyword, cat: getCat(h), badges: move(h),
       right: [h.posts ? `<span class="muted">게시물 ${fmt(h.posts)}</span>` : '', h.views ? `<span class="muted">조회 ${fmt(h.views)}</span>` : '',
@@ -342,12 +378,12 @@ function pageTiktok() {
 
 function pageThreads() {
   const th = data.threads;
-  if (!th) return empty('<b>스레드 토큰이 연결되지 않았어요.</b>');
+  if (!th) return schedBar('threads') + empty('<b>스레드 토큰이 연결되지 않았어요.</b>');
   const units = (data.unified || []).filter((u) => th.counts[u.keyword] != null && matchQ(u.keyword))
     .sort((a, b) => th.counts[b.keyword] - th.counts[a.keyword]);
   const getCat = (u) => u.category;
   const days = th.expiresAt ? Math.round((new Date(th.expiresAt) - Date.now()) / 86400e3) : null;
-  return intro(`통합 상위 100개 키워드가 스레드에서 최근 24시간 동안 얼마나 올라왔는지 (게시물 수, 최대 100)${days != null && days < 10 ? ` · ⚠️ 스레드 토큰 ${days}일 후 만료` : ''}`) +
+  return schedBar('threads') + intro(`통합 상위 100개 키워드가 스레드에서 최근 24시간 동안 얼마나 올라왔는지 (게시물 수, 최대 100)${days != null && days < 10 ? ` · ⚠️ 스레드 토큰 ${days}일 후 만료` : ''}`) +
     catBar(units, getCat) + listOr(units.filter(byCat(getCat)).map((u, i) => row({
       i, k: u.keyword, cat: u.category,
       right: `<a class="muted" href="https://www.threads.net/search?q=${encodeURIComponent(u.keyword)}" target="_blank" rel="noopener">열기 ↗</a>`,

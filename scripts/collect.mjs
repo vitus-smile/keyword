@@ -619,7 +619,10 @@ async function main() {
   const prev = prevDate ? await readJSON(`${ROOT}data/history/${prevDate}.json`, null) : null;
 
   let fresh = [];
-  try { fresh = await googleTrends(); } catch (e) { errors.google = e.message; }
+  // 플랫폼별 마지막 갱신 시각 (이번에 새로 받은 것만 바꾸고 나머지는 이어받는다)
+  const updated = { ...(existing?.updated || {}) };
+  const now = new Date().toISOString();
+  try { fresh = await googleTrends(); updated.google = now; } catch (e) { errors.google = e.message; }
   const byKw = new Map((existing?.google || []).map((t) => [t.keyword, t]));
   for (const t of fresh) {
     const old = byKw.get(t.keyword);
@@ -630,12 +633,15 @@ async function main() {
   const trends = [...byKw.values()].sort((a, b) => b.trafficNum - a.trafficNum);
 
   let youtube = existing?.youtube || null;
-  try { youtube = (await youtubeTrending()) || youtube; } catch (e) { errors.youtube = e.message; }
+  try {
+    const y = await youtubeTrending();
+    if (y) { youtube = y; updated.youtube = now; }
+  } catch (e) { errors.youtube = e.message; }
 
   // 틱톡은 비용 때문에 하루 한 번, 00시 갱신 때 받는다. 00시에 실패했을 때만 다음 갱신에서 다시 시도한다
   let tiktok = existing?.tiktok || null;
   if (!tiktok) {
-    try { tiktok = await tiktokTrending(); } catch (e) { errors.tiktok = e.message; }
+    try { tiktok = await tiktokTrending(); if (tiktok) updated.tiktok = now; } catch (e) { errors.tiktok = e.message; }
   }
   // 광고·라이브 이벤트 같은 틱톡 시스템 해시태그는 트렌드가 아니라서 뺀다
   const TIKTOK_NOISE = /^(paidpartnership|liveincentiveprogram|liveiseasy|livefest|fyp|foryou|foryoupage|fypシ|viral|us|ad|ads|sponsored|tiktok|tiktokshop|capcut|trend|trending)$/i;
@@ -648,7 +654,7 @@ async function main() {
   // 네이버 쇼핑은 어제 하루치라 하루 한 번만 받는다
   let shopping = existing?.naverShopping || null;
   if (!shopping || shopping.categories.length < Object.keys(NAVER_CATS).length) {
-    try { shopping = await naverShopping(); } catch (e) { errors.naverShopping = e.message; }
+    try { shopping = await naverShopping(); updated.naverShopping = now; } catch (e) { errors.naverShopping = e.message; }
   }
   if (shopping) {
     const prevShop = new Set((prev?.naverShopping?.categories || []).flatMap((c) => c.keywords.map((k) => `${c.cid}|${k}`)));
@@ -670,6 +676,7 @@ async function main() {
     naverDatalab(labPool).catch((e) => { errors.datalab = e.message; return null; }),
     naverSearchAd(labPool.filter((k) => !oldAd[k.replace(/\s+/g, '')])).catch((e) => { errors.searchad = e.message; return null; }),
   ]);
+  if (newLab) updated.naverRising = now;
   const datalab = newLab ? { ...oldLab, ...newLab } : existing?.naver?.datalab || null;
   const searchad = newAd ? { ...oldAd, ...newAd } : existing?.naver?.searchad || null;
   const rising = datalab ? findRising(datalab) : null;
@@ -699,7 +706,7 @@ async function main() {
 
   const unified = buildUnified({ trends, rising, shopping, youtube, tiktok });
   let threads = null;
-  try { threads = await threadsReaction(unified.slice(0, 100).map((u) => u.keyword)); } catch (e) { errors.threads = e.message; }
+  try { threads = await threadsReaction(unified.slice(0, 100).map((u) => u.keyword)); if (threads) updated.threads = now; } catch (e) { errors.threads = e.message; }
   const catOf = new Map(unified.map((u) => [norm(u.keyword), u.category]));
   const cat = (k) => catOf.get(norm(k)) || ruleCategory(k) || '기타';
   for (const t of trends) t.category = cat(t.keyword);
@@ -718,9 +725,14 @@ async function main() {
     t.isNew = !prevStreak.has(t.keyword);
   }
 
+  // 이 기능을 넣기 전에 받아 둔 데이터는 그 스냅샷이 만들어진 시각을 갱신 시각으로 본다
+  const had = { google: trends.length, youtube, tiktok, naverShopping: shopping, naverRising: datalab, threads };
+  for (const [k, v] of Object.entries(had)) if (v && !updated[k]) updated[k] = tiktok && k === 'tiktok' ? tiktok.fetchedAt : existing?.generatedAt || now;
+
   const snapshot = {
     date,
-    generatedAt: new Date().toISOString(),
+    generatedAt: now,
+    updated,
     sources: {
       google: !errors.google,
       youtube: !!youtube,
