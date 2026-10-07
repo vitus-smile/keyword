@@ -23,6 +23,7 @@ jobs:
       - name: 수집
         env:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
           NAVER_HUB_KEY_ID: ${{ secrets.NAVER_HUB_KEY_ID }}
           NAVER_HUB_KEY: ${{ secrets.NAVER_HUB_KEY }}
           NAVER_CLIENT_ID: ${{ secrets.NAVER_CLIENT_ID }}

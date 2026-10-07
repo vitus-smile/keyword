@@ -266,6 +266,36 @@ async function naverSearchAd(keywords) {
   return out;
 }
 
+// ── 틱톡 인기 해시태그 (APIFY_TOKEN 필요) — 하루 1번, 무료 크레딧(월 5달러) 안에서 ──
+// Apify의 data_xplorer/tiktok-trends: 해시태그 1개 0.0015달러 + 실행 1회 0.025달러 → 50개면 하루 약 0.1달러
+const TIKTOK_INDUSTRY_TO_CAT = { 'Beauty & Personal Care': '패션·뷰티', 'Apparel & Accessories': '패션·뷰티', Games: '게임',
+  'Food & Beverage': '푸드', Pets: '반려동물', Travel: '여행·여가', 'Tech & Electronics': 'IT·가전', 'News & Entertainment': '연예·방송',
+  'Sports & Outdoor': '스포츠', 'Baby, Kids & Maternity': '육아', 'Household Products': '생활·리빙', 'Home Improvement': '생활·리빙',
+  Health: '생활·리빙', 'Financial Services': '경제·재테크', 'Life Services': '생활·리빙', 'Vehicle & Transportation': '기타' };
+async function tiktokTrending() {
+  if (!env.APIFY_TOKEN) return null;
+  const res = await fetch('https://api.apify.com/v2/acts/data_xplorer~tiktok-trends/run-sync-get-dataset-items?timeout=280', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${env.APIFY_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ countryCode: 'KR', period: '7', sortBy: 'popular', maxHashtags: 50 }),
+  });
+  if (!res.ok) throw new Error(`apify ${res.status} ${(await res.text()).slice(0, 200)}`);
+  const items = await res.json();
+  if (items[0]) console.log('틱톡 결과 필드:', Object.keys(items[0]).join(', '));
+  const pick = (o, ...ks) => ks.map((k) => k.split('.').reduce((a, x) => a?.[x], o)).find((v) => v != null && v !== '');
+  const hashtags = items.map((it, i) => ({
+    keyword: String(pick(it, 'hashtagName', 'hashtag_name', 'hashtag', 'name') || '').replace(/^#/, ''),
+    rank: +pick(it, 'rank') || i + 1,
+    views: +pick(it, 'videoViews', 'video_views', 'views', 'viewCount') || 0,
+    posts: +pick(it, 'publishCnt', 'publish_cnt', 'posts', 'videoCount') || 0,
+    industry: pick(it, 'industryInfo.value', 'industry_info.value', 'industry.value', 'industry') || null,
+    rankDiff: pick(it, 'rankDiff', 'rank_diff') ?? null,
+    isNew: !!pick(it, 'isNew', 'is_new', 'isNewOnBoard'),
+  })).filter((h) => h.keyword).sort((a, b) => a.rank - b.rank);
+  if (!hashtags.length) throw new Error('틱톡 해시태그 0건');
+  return { fetchedAt: new Date().toISOString(), hashtags };
+}
+
 // ── 분야 분류 ───────────────────────────────────────────────────
 // 모든 플랫폼을 같은 분야 이름으로 맞춘다
 const CATEGORIES = ['연예·방송', '음악', '스포츠', '게임', '뉴스·사회', '경제·재테크', 'IT·가전', '패션·뷰티',
@@ -303,9 +333,9 @@ function ruleCategory(text) {
 // ── 통합 순위 ───────────────────────────────────────────────────
 // 플랫폼마다 1위 100점에서 순위가 내려갈수록 점수가 줄어든다.
 // 쇼핑은 분야가 10개라 1위가 10개 나오므로 70%만 반영한다. 한 플랫폼 안에서는 가장 높은 점수 하나만 센다.
-// 여러 플랫폼(구글·네이버·유튜브)에 동시에 뜨면 플랫폼 하나 늘 때마다 +50점.
+// 여러 플랫폼(구글·네이버·유튜브·틱톡)에 동시에 뜨면 플랫폼 하나 늘 때마다 +50점.
 const norm = (k) => k.replace(/\s+/g, '').toLowerCase();
-function buildUnified({ trends, rising, shopping, youtube }) {
+function buildUnified({ trends, rising, shopping, youtube, tiktok }) {
   const map = new Map();
   const add = (kw, platform, label, points, catHint) => {
     const id = norm(kw);
@@ -325,6 +355,9 @@ function buildUnified({ trends, rising, shopping, youtube }) {
   (youtube?.keywords || []).forEach((k, i) => add(k.keyword, 'youtube', `유튜브 인기영상 ${k.count}개`, pts(i, youtube.keywords.length),
     k.ytCat ? `yt:${YT_TO_CAT[k.ytCat]}` : null));
 
+  (tiktok?.hashtags || []).forEach((h, i) => add(h.keyword, 'tiktok', `틱톡 해시태그 ${h.rank}위`, pts(i, tiktok.hashtags.length),
+    TIKTOK_INDUSTRY_TO_CAT[h.industry] ? `tt:${TIKTOK_INDUSTRY_TO_CAT[h.industry]}` : null));
+
   return [...map.values()].map((e) => {
     // 플랫폼마다 가장 높은 점수 하나만 센다
     const best = {};
@@ -333,7 +366,7 @@ function buildUnified({ trends, rising, shopping, youtube }) {
     // 분야: 쇼핑 분야 > 키워드·뉴스 단어 규칙 > 유튜브 영상 분야 > 기타
     const shop = e.hints.find((h) => h.startsWith('shop:'));
     const rule = e.hints.find((h) => !h.includes(':')) || ruleCategory(e.keyword);
-    const yt = e.hints.find((h) => h.startsWith('yt:'));
+    const yt = e.hints.find((h) => h.startsWith('yt:') || h.startsWith('tt:'));
     const category = shop?.slice(5) || rule || yt?.slice(3) || '기타';
     return { keyword: e.keyword, category, platforms: [...e.platforms],
       score: Math.round(base + 50 * (e.platforms.size - 1)), signals: e.signals };
@@ -369,6 +402,16 @@ async function main() {
   let youtube = existing?.youtube || null;
   try { youtube = (await youtubeTrending()) || youtube; } catch (e) { errors.youtube = e.message; }
 
+  // 틱톡은 비용 때문에 하루 한 번만 받는다 (그날 첫 성공 이후로는 재사용)
+  let tiktok = existing?.tiktok || null;
+  if (!tiktok) {
+    try { tiktok = await tiktokTrending(); } catch (e) { errors.tiktok = e.message; }
+  }
+  if (tiktok && prev?.tiktok) {
+    const before = new Map(prev.tiktok.hashtags.map((h) => [h.keyword, h.rank]));
+    for (const h of tiktok.hashtags) h.prevRank = before.get(h.keyword) ?? null;
+  }
+
   // 네이버 쇼핑은 어제 하루치라 하루 한 번만 받는다
   let shopping = existing?.naverShopping || null;
   if (!shopping || shopping.categories.length < Object.keys(NAVER_CATS).length) {
@@ -385,6 +428,7 @@ async function main() {
     ...trends.map((t) => t.keyword),
     ...(shopping?.categories.flatMap((c) => c.keywords) || []),
     ...(youtube?.keywords.slice(0, 30).map((k) => k.keyword) || []),
+    ...(tiktok?.hashtags.slice(0, 30).map((h) => h.keyword) || []),
     ...trends.slice(0, 10).flatMap((t) => (suggestions[t.keyword]?.naver || []).slice(0, 3)),
   ])];
   const oldLab = existing?.naver?.datalab || {};
@@ -402,6 +446,7 @@ async function main() {
     ...trends.map((t) => t.keyword),
     ...(rising?.map((r) => r.keyword) || []),
     ...(youtube?.keywords.slice(0, 15).map((k) => k.keyword) || []),
+    ...(tiktok?.hashtags.slice(0, 20).map((h) => h.keyword) || []),
     ...(shopping?.categories.flatMap((c) => c.keywords.slice(0, 5)) || []),
   ])];
   for (const q of targets) {
@@ -419,7 +464,7 @@ async function main() {
     if (newBlog) blog = { ...oldBlog, ...newBlog };
   } catch (e) { errors.blog = e.message; }
 
-  const unified = buildUnified({ trends, rising, shopping, youtube });
+  const unified = buildUnified({ trends, rising, shopping, youtube, tiktok });
   const catOf = new Map(unified.map((u) => [norm(u.keyword), u.category]));
   const cat = (k) => catOf.get(norm(k)) || ruleCategory(k) || '기타';
   for (const t of trends) t.category = cat(t.keyword);
@@ -429,6 +474,7 @@ async function main() {
     for (const c of youtube.categories) for (const v of c.videos) v.category = YT_TO_CAT[v.ytCat] || '기타';
   }
   if (shopping) for (const c of shopping.categories) c.category = SHOP_TO_CAT[c.cid];
+  if (tiktok) for (const h of tiktok.hashtags) h.category = cat(h.keyword);
 
   // 어제와 비교: 새로 등장한 급상승 키워드 표시, 연속 등장 일수
   const prevStreak = new Map((prev?.google || []).map((t) => [t.keyword, t.streak || 1]));
@@ -447,6 +493,7 @@ async function main() {
       naverSearchAd: !!searchad,
       naverBlog: !!blog,
       naverShopping: !!shopping,
+      tiktok: !!tiktok,
     },
     google: trends,
     youtube,
@@ -454,6 +501,7 @@ async function main() {
     unified: unified.slice(0, 300),
     suggestions,
     naverShopping: shopping,
+    tiktok,
     naver: { datalab, searchad, rising, blog },
     errors,
   };
@@ -465,7 +513,7 @@ async function main() {
   await writeFile(`${ROOT}data/index.json`, JSON.stringify({ dates }));
 
   console.log(`✔ ${date}: 구글 ${trends.length}개, 유튜브 ${youtube ? youtube.videos.length + '개' : '키 없음'}, ` +
-    `연관검색어 ${targets.length}개, 데이터랩 ${datalab ? Object.keys(datalab).length + '개(급상승 ' + rising.length + ')' : '키 없음'}, 블로그 ${blog ? Object.keys(blog).length + '개' : '키 없음'}, 검색광고 ${searchad ? 'O' : '키 없음'}, 쇼핑 ${shopping ? shopping.categories.length + '개 분야' : 'X'}`);
+    `연관검색어 ${targets.length}개, 데이터랩 ${datalab ? Object.keys(datalab).length + '개(급상승 ' + rising.length + ')' : '키 없음'}, 블로그 ${blog ? Object.keys(blog).length + '개' : '키 없음'}, 검색광고 ${searchad ? 'O' : '키 없음'}, 쇼핑 ${shopping ? shopping.categories.length + '개 분야' : 'X'}, 틱톡 ${tiktok ? tiktok.hashtags.length + '개' : '키 없음'}`);
   if (Object.keys(errors).length) console.warn('오류:', errors);
 }
 
