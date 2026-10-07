@@ -1,7 +1,48 @@
 {
-  "rewrites": [
-    { "source": "/:page(google|naver|youtube|tiktok|instagram|threads)", "destination": "/" },
-    { "source": "/privacy", "destination": "/privacy.html" }
+  "redirects": [
+    {
+      "source": "/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "keyword-two-phi.vercel.app"
+        }
+      ],
+      "destination": "https://keyword.8282ok.com/:path*",
+      "permanent": true
+    }
   ],
-  "headers": [{ "source": "/data/(.*)", "headers": [{ "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }] }]
+  "rewrites": [
+    {
+      "source": "/:page(google|naver|youtube|tiktok|threads)",
+      "destination": "/p/:page.html"
+    },
+    {
+      "source": "/instagram",
+      "destination": "/"
+    },
+    {
+      "source": "/day",
+      "destination": "/day/index.html"
+    },
+    {
+      "source": "/day/:date",
+      "destination": "/day/:date.html"
+    },
+    {
+      "source": "/privacy",
+      "destination": "/privacy.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/data/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, must-revalidate"
+        }
+      ]
+    }
+  ]
 }

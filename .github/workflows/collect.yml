@@ -38,7 +38,7 @@ jobs:
         run: |
           git config user.name "vitus-smile"
           git config user.email "324344486+vitus-smile@users.noreply.github.com"
-          git add data index.html sitemap.xml
+          git add data index.html sitemap.xml rss.xml p day
           git diff --cached --quiet && exit 0
           git commit -m "data: $(TZ=Asia/Seoul date '+%Y-%m-%d %H:%M') 키워드 수집"
           git pull --rebase

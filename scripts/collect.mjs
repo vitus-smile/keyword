@@ -408,23 +408,186 @@ function buildUnified({ trends, rising, shopping, youtube, tiktok }) {
   }).sort((a, b) => b.score - a.score);
 }
 
-// ── 검색엔진용 정적 내용 ─────────────────────────────────────────
-// 화면은 자바스크립트로 그리지만, 검색엔진이 바로 읽을 수 있게 오늘의 통합 순위를 index.html에 미리 써 둔다
+// ── 검색엔진용 정적 페이지 ───────────────────────────────────────
+// 화면은 자바스크립트로 그리지만, 검색엔진이 바로 읽도록 페이지마다 그날 목록을 HTML에 미리 써 둔다.
+//  - index.html(통합), p/<플랫폼>.html: 같은 앱에 제목·설명·canonical·정적 목록만 다르게
+//  - day/<날짜>.html: 날짜별 트렌드 키워드 기록 (계속 쌓이는 롱테일 페이지)
 const SITE = 'https://keyword.8282ok.com';
-async function writeSeo(snap) {
-  const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  const PF = { google: '구글', naver: '네이버', youtube: '유튜브', tiktok: '틱톡' };
-  const items = (snap.unified || []).slice(0, 50).map((u) =>
-    `<li><b>${esc(u.keyword)}</b> · ${esc(u.category)} · ${u.platforms.map((p) => PF[p]).join('·')}</li>`).join('');
-  const block = `<!--SEO--><section class="seo"><h2>${snap.date} 오늘의 트렌드 키워드 통합 순위</h2>` +
-    `<p>구글 급상승, 네이버 급상승·쇼핑 인기, 유튜브 인기 영상, 틱톡 인기 해시태그를 합쳐 매긴 순위예요.</p><ol>${items}</ol></section><!--/SEO-->`;
-  const path = `${ROOT}index.html`;
-  const html = await readFile(path, 'utf8');
-  await writeFile(path, html.replace(/<!--SEO-->[\s\S]*?<!--\/SEO-->/, block));
+const SITE_NAME = '비투스의 키워드 세상';
+const PF = { google: '구글', naver: '네이버', youtube: '유튜브', tiktok: '틱톡' };
+const escH = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const fmtN = (n) => (n >= 10000 ? `${(n / 10000).toFixed(n >= 100000 ? 0 : 1)}만` : `${n}`);
+const korDate = (d) => { const [y, m, dd] = d.split('-').map(Number); return `${y}년 ${m}월 ${dd}일`; };
 
-  const pages = ['/', '/google', '/naver', '/youtube', '/tiktok', '/threads', '/privacy'];
+function pageDefs(snap) {
+  const d = korDate(snap.date);
+  const li = (arr) => `<ol>${arr.join('')}</ol>`;
+  const uni = (snap.unified || []).slice(0, 50).map((u) =>
+    `<li><b>${escH(u.keyword)}</b> · ${escH(u.category)} · ${u.platforms.map((p) => PF[p]).join('·')}</li>`);
+  const shop = (snap.naverShopping?.categories || []).map((c) =>
+    `<h3>${escH(c.name)} 인기 검색어</h3>${li(c.keywords.slice(0, 10).map((k) => `<li>${escH(k)}</li>`))}`).join('');
+  const rising = (snap.naver?.rising || []).map((r) => `<li><b>${escH(r.keyword)}</b> · 최근 3일 검색량 ${Math.round((r.score - 1) * 100)}% 상승</li>`);
+  const yt = snap.youtube;
+  return {
+    all: { path: '/', title: `오늘의 트렌드 키워드 통합 순위 (${d})`,
+      desc: `${d} 구글·네이버·유튜브·틱톡에서 동시에 뜨는 트렌드 키워드 통합 순위. 1위 ${snap.unified?.[0]?.keyword || ''} 등 블로그·콘텐츠 주제를 하루 4번 갱신해요.`,
+      body: `<h2>${d} 트렌드 키워드 통합 순위</h2><p>구글 급상승, 네이버 급상승·쇼핑 인기, 유튜브 인기 영상, 틱톡 인기 해시태그를 합쳐 점수를 매긴 오늘의 순위예요. 여러 플랫폼에 동시에 뜰수록 높은 점수를 받아요.</p>${li(uni)}` },
+    google: { path: '/google', title: `구글 급상승 검색어 (${d})`,
+      desc: `${d} 구글에서 검색이 급증한 한국 트렌드 키워드 ${snap.google?.length || 0}개와 관련 뉴스, 연관 검색어.`,
+      body: `<h2>${d} 구글 급상승 검색어</h2><p>구글 트렌드에서 지금 한국 검색량이 급증한 키워드를 하루 동안 모은 목록이에요.</p>${
+        li((snap.google || []).map((t) => `<li><b>${escH(t.keyword)}</b> · 검색 ${escH(t.traffic)}${t.news?.[0] ? ` · ${escH(t.news[0].title)}` : ''}</li>`))}` },
+    naver: { path: '/naver', title: `네이버 급상승·쇼핑 인기 검색어 (${d})`,
+      desc: `${d} 네이버 검색량이 급상승한 키워드와 패션·화장품·식품 등 쇼핑 분야별 인기 검색어 TOP 20, 블로그 글 수.`,
+      body: `<h2>${d} 네이버 급상승 검색어</h2><p>최근 3일 네이버 검색량이 그 전 4주 평균보다 크게 오른 키워드예요.</p>${li(rising)}<h2>네이버 쇼핑 분야별 인기 검색어</h2>${shop}` },
+    youtube: { path: '/youtube', title: `유튜브 인기 키워드·인기 영상 (${d})`,
+      desc: `${d} 한국 유튜브 인기 동영상에서 많이 나온 키워드와 분야별 인기 영상.`,
+      body: `<h2>${d} 유튜브 인기 키워드</h2><p>한국 유튜브 인기 동영상의 태그와 제목에서 많이 나온 키워드예요.</p>${
+        li((yt?.keywords || []).slice(0, 30).map((k) => `<li><b>${escH(k.keyword)}</b> · 인기 영상 ${k.count}개</li>`))}<h2>인기 영상</h2>${
+        li((yt?.videos || []).slice(0, 15).map((v) => `<li>${escH(v.title)} · ${escH(v.channel)} · 조회 ${fmtN(v.views)}</li>`))}` },
+    tiktok: { path: '/tiktok', title: `틱톡 인기 해시태그 순위 (${d})`,
+      desc: `${d} 틱톡 한국 인기 해시태그 순위와 게시물 수, 조회수.`,
+      body: `<h2>${d} 틱톡 인기 해시태그</h2><p>틱톡 Creative Center 기준 최근 7일 한국 인기 해시태그예요.</p>${
+        li((snap.tiktok?.hashtags || []).map((h) => `<li><b>#${escH(h.keyword)}</b>${h.views ? ` · 조회 ${fmtN(h.views)}` : ''}</li>`))}` },
+    threads: { path: '/threads', title: `스레드 키워드 반응 (${d})`,
+      desc: `${d} 트렌드 키워드가 스레드에서 최근 24시간 동안 얼마나 언급됐는지.`,
+      body: `<h2>${d} 스레드 키워드 반응</h2><p>통합 순위 상위 키워드가 스레드에 최근 24시간 동안 올라온 게시물 수예요.</p>${
+        li(Object.entries(snap.threads?.counts || {}).sort((a, b) => b[1] - a[1]).slice(0, 30).map(([k, n]) => `<li><b>${escH(k)}</b> · ${n >= 100 ? '100+' : n}개</li>`))}` },
+  };
+}
+
+const NAV_LINKS = `<nav aria-label="플랫폼별 트렌드"><a href="/">통합 순위</a><a href="/google">구글 급상승</a><a href="/naver">네이버 급상승·쇼핑</a><a href="/youtube">유튜브 인기</a><a href="/tiktok">틱톡 해시태그</a><a href="/threads">스레드 반응</a><a href="/day">지난 트렌드</a></nav>`;
+function headFor(def, date) {
+  const url = SITE + def.path;
+  const title = `${def.title} · ${SITE_NAME}`;
+  const ld = def.path === '/'
+    ? { '@context': 'https://schema.org', '@type': 'WebSite', name: SITE_NAME, url: `${SITE}/`, inLanguage: 'ko-KR', description: def.desc }
+    : { '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
+      { '@type': 'ListItem', position: 1, name: SITE_NAME, item: `${SITE}/` },
+      { '@type': 'ListItem', position: 2, name: def.title.replace(/ \(.*\)$/, ''), item: url }] };
+  return `<!--HEAD-->
+<title>${escH(title)}</title>
+<meta name="description" content="${escH(def.desc)}">
+<link rel="canonical" href="${url}">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="${SITE_NAME}">
+<meta property="og:title" content="${escH(title)}">
+<meta property="og:description" content="${escH(def.desc)}">
+<meta property="og:url" content="${url}">
+<meta property="og:image" content="${SITE}/og.png">
+<meta property="og:locale" content="ko_KR">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="${SITE}/og.png">
+<meta property="article:modified_time" content="${date}">
+<link rel="alternate" type="application/rss+xml" title="${SITE_NAME} 일별 트렌드" href="${SITE}/rss.xml">
+<script type="application/ld+json">${JSON.stringify(ld)}</script>
+<!--/HEAD-->`;
+}
+
+const ARCHIVE_CSS = `body{margin:0;background:#f6f7fb;color:#161a23;font-family:'Noto Sans KR',system-ui,sans-serif;line-height:1.7}
+main{max-width:860px;margin:0 auto;padding:32px 16px 80px}a{color:#5b5bf0}h1{font-size:24px;margin:0 0 6px}h2{font-size:18px;margin:28px 0 6px}
+.muted{color:#667085;font-size:14px}nav{display:flex;flex-wrap:wrap;gap:10px;font-size:14px;margin:14px 0}
+ol,ul{padding-left:22px}li{margin:3px 0}.cols{columns:2;gap:28px}
+@media (prefers-color-scheme:dark){body{background:#0e1015;color:#eef0f5}.muted{color:#98a1b3}a{color:#8b8bff}}
+@media (max-width:640px){.cols{columns:1}}`;
+function archivePage({ title, desc, path, crumbs, body }) {
+  const ld = { '@context': 'https://schema.org', '@type': 'BreadcrumbList',
+    itemListElement: crumbs.map(([name, p], i) => ({ '@type': 'ListItem', position: i + 1, name, item: SITE + p })) };
+  return `<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${escH(title)} · ${SITE_NAME}</title>
+<meta name="description" content="${escH(desc)}">
+<link rel="canonical" href="${SITE}${path}">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="${SITE_NAME}">
+<meta property="og:title" content="${escH(title)}">
+<meta property="og:description" content="${escH(desc)}">
+<meta property="og:url" content="${SITE}${path}">
+<meta property="og:image" content="${SITE}/og.png">
+<meta property="og:locale" content="ko_KR">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="alternate" type="application/rss+xml" title="${SITE_NAME} 일별 트렌드" href="${SITE}/rss.xml">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌏</text></svg>">
+<script type="application/ld+json">${JSON.stringify(ld)}</script>
+<style>${ARCHIVE_CSS}</style>
+</head>
+<body><main>
+<div class="muted">${crumbs.map(([n, p]) => `<a href="${p}">${escH(n)}</a>`).join(' › ')}</div>
+${body}
+${NAV_LINKS}
+<p class="muted">${SITE_NAME}는 구글·네이버·유튜브·틱톡 트렌드 키워드를 매일 00·06·12·18시에 모아 보여주는 블로그·콘텐츠 주제 발굴 도구예요. · <a href="/privacy">개인정보처리방침</a></p>
+</main></body></html>
+`;
+}
+
+function dayBody(snap, prevDate, nextDate) {
+  const d = korDate(snap.date);
+  const defs = pageDefs(snap);
+  const byCat = {};
+  for (const u of (snap.unified || []).slice(0, 150)) (byCat[u.category] ||= []).push(u.keyword);
+  const cats = (snap.categories || Object.keys(byCat)).filter((c) => byCat[c]?.length)
+    .map((c) => `<h3>${escH(c)}</h3><p>${byCat[c].slice(0, 12).map(escH).join(', ')}</p>`).join('');
+  const pager = `<nav>${prevDate ? `<a href="/day/${prevDate}">← ${korDate(prevDate)}</a>` : ''}${nextDate ? `<a href="/day/${nextDate}">${korDate(nextDate)} →</a>` : ''}</nav>`;
+  return `<h1>${d} 트렌드 키워드</h1>
+<p class="muted">${d} 하루 동안 구글·네이버·유튜브·틱톡에서 모은 트렌드 키워드 기록이에요. 오늘 순위는 <a href="/">통합 순위</a>에서 볼 수 있어요.</p>
+${pager}
+${defs.all.body.replace('<ol>', '<ol class="cols">')}
+<h2>분야별 트렌드 키워드</h2>${cats}
+${defs.google.body.replace('<ol>', '<ol class="cols">')}
+${defs.naver.body.split('<h2>네이버 쇼핑')[0]}
+${defs.tiktok.body}
+${pager}`;
+}
+
+async function writeSeo(snap, dates) {
+  const defs = pageDefs(snap);
+  const tpl = await readFile(`${ROOT}index.html`, 'utf8');
+  await mkdir(`${ROOT}p`, { recursive: true });
+  for (const [id, def] of Object.entries(defs)) {
+    const html = tpl.replace(/<!--HEAD-->[\s\S]*?<!--\/HEAD-->/, headFor(def, snap.date))
+      .replace(/<!--SEO-->[\s\S]*?<!--\/SEO-->/, `<!--SEO--><section class="seo">${def.body}${NAV_LINKS}</section><!--/SEO-->`);
+    await writeFile(id === 'all' ? `${ROOT}index.html` : `${ROOT}p/${id}.html`, html);
+  }
+
+  // 날짜별 기록: 오늘 페이지는 매번 다시 쓰고, 어제 페이지는 '다음 날' 링크를 달기 위해 한 번 더 쓴다
+  await mkdir(`${ROOT}day`, { recursive: true });
+  const all = [...dates].sort();
+  const writeDay = async (s) => {
+    const i = all.indexOf(s.date);
+    const d = korDate(s.date);
+    const top = (s.unified || []).slice(0, 5).map((u) => u.keyword).join(', ');
+    await writeFile(`${ROOT}day/${s.date}.html`, archivePage({
+      title: `${d} 트렌드 키워드`, desc: `${d} 구글·네이버·유튜브·틱톡 트렌드 키워드 기록. ${top} 등`,
+      path: `/day/${s.date}`, crumbs: [[SITE_NAME, '/'], ['지난 트렌드', '/day'], [d, `/day/${s.date}`]],
+      body: dayBody(s, all[i - 1], all[i + 1]) }));
+  };
+  await writeDay(snap);
+  const yIdx = all.indexOf(snap.date) - 1;
+  if (yIdx >= 0) {
+    const y = await readJSON(`${ROOT}data/history/${all[yIdx]}.json`, null);
+    if (y?.unified) await writeDay(y);
+  }
+  const list = [...all].reverse().map((d) => `<li><a href="/day/${d}">${korDate(d)} 트렌드 키워드</a></li>`).join('');
+  await writeFile(`${ROOT}day/index.html`, archivePage({
+    title: '지난 트렌드 키워드 모음', desc: '날짜별 구글·네이버·유튜브·틱톡 트렌드 키워드 기록 모음',
+    path: '/day', crumbs: [[SITE_NAME, '/'], ['지난 트렌드', '/day']],
+    body: `<h1>지난 트렌드 키워드 모음</h1><p class="muted">날짜를 누르면 그날 구글·네이버·유튜브·틱톡에서 뜬 키워드를 볼 수 있어요.</p><ul>${list}</ul>` }));
+
+  // RSS (네이버 서치어드바이저 제출용)
+  const rssItems = [...all].reverse().slice(0, 30).map((d) => `  <item><title>${korDate(d)} 트렌드 키워드</title><link>${SITE}/day/${d}</link><guid>${SITE}/day/${d}</guid><pubDate>${new Date(`${d}T00:00:00+09:00`).toUTCString()}</pubDate><description>${korDate(d)} 구글·네이버·유튜브·틱톡 트렌드 키워드 기록</description></item>`).join('\n');
+  await writeFile(`${ROOT}rss.xml`, `<?xml version="1.0" encoding="UTF-8"?>\n<rss version="2.0"><channel>\n  <title>${SITE_NAME}</title>\n  <link>${SITE}/</link>\n  <description>날짜별 트렌드 키워드 기록</description>\n  <language>ko</language>\n${rssItems}\n</channel></rss>\n`);
+
+  const pages = Object.values(defs).map((d) => d.path);
+  const urls = [
+    ...pages.map((p) => [p, snap.date, 'daily']),
+    ['/day', snap.date, 'daily'],
+    ...all.map((d) => [`/day/${d}`, d === snap.date ? snap.date : d, 'monthly']),
+    ['/privacy', '2026-10-07', 'yearly'],
+  ];
   await writeFile(`${ROOT}sitemap.xml`, `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${
-    pages.map((p) => `  <url><loc>${SITE}${p}</loc><lastmod>${snap.date}</lastmod><changefreq>${p === '/privacy' ? 'yearly' : 'daily'}</changefreq></url>`).join('\n')}\n</urlset>\n`);
+    urls.map(([p, m, f]) => `  <url><loc>${SITE}${p}</loc><lastmod>${m}</lastmod><changefreq>${f}</changefreq></url>`).join('\n')}\n</urlset>\n`);
 }
 
 // ── 실행 ─────────────────────────────────────────────────────────
@@ -573,7 +736,7 @@ async function main() {
   const dates = [...new Set([...index.dates, date])].sort().slice(-90);
   await writeFile(`${ROOT}data/index.json`, JSON.stringify({ dates }));
 
-  await writeSeo(snapshot);
+  await writeSeo(snapshot, dates);
 
   console.log(`✔ ${date}: 구글 ${trends.length}개, 유튜브 ${youtube ? youtube.videos.length + '개' : '키 없음'}, ` +
     `연관검색어 ${targets.length}개, 데이터랩 ${datalab ? Object.keys(datalab).length + '개(급상승 ' + rising.length + ')' : '키 없음'}, 블로그 ${blog ? Object.keys(blog).length + '개' : '키 없음'}, 검색광고 ${searchad ? 'O' : '키 없음'}, 쇼핑 ${shopping ? shopping.categories.length + '개 분야' : 'X'}, 틱톡 ${tiktok ? tiktok.hashtags.length + '개' : '키 없음'}, 스레드 ${threads ? Object.keys(threads.counts).length + '개' : '키 없음'}`);
