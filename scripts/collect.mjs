@@ -415,6 +415,9 @@ async function main() {
   if (!tiktok) {
     try { tiktok = await tiktokTrending(); } catch (e) { errors.tiktok = e.message; }
   }
+  // 광고·라이브 이벤트 같은 틱톡 시스템 해시태그는 트렌드가 아니라서 뺀다
+  const TIKTOK_NOISE = /^(paidpartnership|liveincentiveprogram|liveiseasy|livefest|fyp|foryou|foryoupage|fypシ|viral|us|ad|ads|sponsored|tiktok|tiktokshop|capcut|trend|trending)$/i;
+  if (tiktok) tiktok.hashtags = tiktok.hashtags.filter((h) => !TIKTOK_NOISE.test(h.keyword));
   if (tiktok && prev?.tiktok) {
     const before = new Map(prev.tiktok.hashtags.map((h) => [h.keyword, h.rank]));
     for (const h of tiktok.hashtags) h.prevRank = before.get(h.keyword) ?? null;
