@@ -304,6 +304,33 @@ async function tiktokTrending() {
   return { fetchedAt: new Date().toISOString(), hashtags };
 }
 
+// ── 스레드 반응 (THREADS_ACCESS_TOKEN 필요) ──────────────────────
+// 스레드 키워드 검색은 좋아요 수를 주지 않아서, 최근 24시간 게시물 수(최대 100)로 반응을 잰다.
+// 하루 2,200번 한도 → 통합 상위 100개 × 하루 4번 = 400번
+async function threadsReaction(keywords) {
+  const token = env.THREADS_ACCESS_TOKEN;
+  if (!token) return null;
+  // 장기 토큰(60일) 연장. 같은 토큰이면 만료일만 늘어나고, 새 토큰이 오면 Secret을 바꿔야 한다
+  let expiresAt = null;
+  try {
+    const r = await (await get(`https://graph.threads.net/refresh_access_token?grant_type=th_refresh_token&access_token=${encodeURIComponent(token)}`)).json();
+    if (r.expires_in) expiresAt = new Date(Date.now() + r.expires_in * 1000).toISOString();
+    if (r.access_token && r.access_token !== token) console.warn('⚠️ 스레드 토큰이 새로 발급됐어요. THREADS_ACCESS_TOKEN Secret을 바꿔야 합니다.');
+  } catch (e) { console.warn('스레드 토큰 연장 실패:', e.message); }
+
+  const since = Math.floor(Date.now() / 1000) - 86400;
+  const counts = {};
+  for (const k of keywords) {
+    try {
+      const u = `https://graph.threads.net/v1.0/keyword_search?q=${encodeURIComponent(k)}&search_type=RECENT&since=${since}&limit=100&fields=id&access_token=${encodeURIComponent(token)}`;
+      const j = await (await get(u)).json();
+      counts[k] = (j.data || []).length;
+    } catch (e) { console.warn('threads', k, e.message); }
+    await sleep(300);
+  }
+  return { expiresAt, counts };
+}
+
 // ── 분야 분류 ───────────────────────────────────────────────────
 // 모든 플랫폼을 같은 분야 이름으로 맞춘다
 const CATEGORIES = ['연예·방송', '음악', '스포츠', '게임', '뉴스·사회', '경제·재테크', 'IT·가전', '패션·뷰티',
@@ -476,6 +503,8 @@ async function main() {
   } catch (e) { errors.blog = e.message; }
 
   const unified = buildUnified({ trends, rising, shopping, youtube, tiktok });
+  let threads = null;
+  try { threads = await threadsReaction(unified.slice(0, 100).map((u) => u.keyword)); } catch (e) { errors.threads = e.message; }
   const catOf = new Map(unified.map((u) => [norm(u.keyword), u.category]));
   const cat = (k) => catOf.get(norm(k)) || ruleCategory(k) || '기타';
   for (const t of trends) t.category = cat(t.keyword);
@@ -505,6 +534,7 @@ async function main() {
       naverBlog: !!blog,
       naverShopping: !!shopping,
       tiktok: !!tiktok,
+      threads: !!threads,
     },
     google: trends,
     youtube,
@@ -513,6 +543,7 @@ async function main() {
     suggestions,
     naverShopping: shopping,
     tiktok,
+    threads,
     naver: { datalab, searchad, rising, blog },
     errors,
   };
@@ -524,7 +555,7 @@ async function main() {
   await writeFile(`${ROOT}data/index.json`, JSON.stringify({ dates }));
 
   console.log(`✔ ${date}: 구글 ${trends.length}개, 유튜브 ${youtube ? youtube.videos.length + '개' : '키 없음'}, ` +
-    `연관검색어 ${targets.length}개, 데이터랩 ${datalab ? Object.keys(datalab).length + '개(급상승 ' + rising.length + ')' : '키 없음'}, 블로그 ${blog ? Object.keys(blog).length + '개' : '키 없음'}, 검색광고 ${searchad ? 'O' : '키 없음'}, 쇼핑 ${shopping ? shopping.categories.length + '개 분야' : 'X'}, 틱톡 ${tiktok ? tiktok.hashtags.length + '개' : '키 없음'}`);
+    `연관검색어 ${targets.length}개, 데이터랩 ${datalab ? Object.keys(datalab).length + '개(급상승 ' + rising.length + ')' : '키 없음'}, 블로그 ${blog ? Object.keys(blog).length + '개' : '키 없음'}, 검색광고 ${searchad ? 'O' : '키 없음'}, 쇼핑 ${shopping ? shopping.categories.length + '개 분야' : 'X'}, 틱톡 ${tiktok ? tiktok.hashtags.length + '개' : '키 없음'}, 스레드 ${threads ? Object.keys(threads.counts).length + '개' : '키 없음'}`);
   if (Object.keys(errors).length) console.warn('오류:', errors);
 }
 

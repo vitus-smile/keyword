@@ -12,18 +12,18 @@
 :root{
   --bg:#f6f7fb; --surface:#fff; --surface-2:#f1f3f8; --line:#e4e7ef;
   --text:#161a23; --muted:#667085; --accent:#5b5bf0; --accent-soft:#ececff;
-  --google:#1a73e8; --youtube:#e62117; --naver:#03a94d; --tiktok:#111; --hot:#ff5a36;
+  --google:#1a73e8; --youtube:#e62117; --naver:#03a94d; --tiktok:#111; --threads:#000; --hot:#ff5a36;
   --shadow:0 1px 2px rgba(16,24,40,.05),0 4px 16px rgba(16,24,40,.04);
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --bg:#0e1015; --surface:#171a21; --surface-2:#1f232c; --line:#2a2f3a;
   --text:#eef0f5; --muted:#98a1b3; --accent:#8b8bff; --accent-soft:#25264a;
-  --google:#6ea8ff; --youtube:#ff5a52; --naver:#2fd27a; --tiktok:#25f4ee; --hot:#ff7a5c; --shadow:none;
+  --google:#6ea8ff; --youtube:#ff5a52; --naver:#2fd27a; --tiktok:#25f4ee; --threads:#fff; --hot:#ff7a5c; --shadow:none;
 }}
 :root[data-theme="dark"]{
   --bg:#0e1015; --surface:#171a21; --surface-2:#1f232c; --line:#2a2f3a;
   --text:#eef0f5; --muted:#98a1b3; --accent:#8b8bff; --accent-soft:#25264a;
-  --google:#6ea8ff; --youtube:#ff5a52; --naver:#2fd27a; --tiktok:#25f4ee; --hot:#ff7a5c; --shadow:none;
+  --google:#6ea8ff; --youtube:#ff5a52; --naver:#2fd27a; --tiktok:#25f4ee; --threads:#fff; --hot:#ff7a5c; --shadow:none;
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font-family:'Noto Sans KR',system-ui,sans-serif;font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
@@ -151,7 +151,7 @@ const PAGES = [
   { id: 'youtube', name: '유튜브', color: 'var(--youtube)' },
   { id: 'tiktok', name: '틱톡', color: 'var(--tiktok)' },
   { id: 'instagram', name: '인스타', soon: true },
-  { id: 'threads', name: '스레드', soon: true },
+  { id: 'threads', name: '스레드', color: 'var(--threads)' },
 ];
 const PF_NAME = { google: '구글', naver: '네이버', youtube: '유튜브', tiktok: '틱톡' };
 const st = { page: 'all', sub: {}, cat: '전체', q: '' };
@@ -164,6 +164,11 @@ function toast(msg) {
   clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('show'), 1400);
 }
 const tagBtn = (k) => `<button class="tag" data-copy="${esc(k)}">${esc(k)}</button>`;
+function threadsOf(k) {
+  const n = data.threads?.counts?.[k];
+  if (n == null) return '';
+  return `<span class="blog" title="스레드 최근 24시간 게시물 수">스레드 ${n >= 100 ? '100+' : n}</span>`;
+}
 function blogOf(k) {
   const n = data.naver?.blog?.[k];
   if (n == null) return '';
@@ -193,7 +198,7 @@ const catTag = (k, c) => `<span class="cat">${esc(c || catOf.get(norm(k)) || '�
 function row({ i, k, cat, badges = '', right = '', sub = '', pre = '' }) {
   return `<div class="card item r${i + 1}">
     <div class="top"><span class="rank">${i + 1}</span><span class="kw">${esc(k)}</span>${catTag(k, cat)}${badges}
-      <div class="right">${blogOf(k)}${right}</div></div>
+      <div class="right">${threadsOf(k)}${blogOf(k)}${right}</div></div>
     ${sub}${detail(k, pre)}
   </div>`;
 }
@@ -317,6 +322,20 @@ function pageTiktok() {
     })));
 }
 
+function pageThreads() {
+  const th = data.threads;
+  if (!th) return empty('<b>스레드 토큰이 연결되지 않았어요.</b>');
+  const units = (data.unified || []).filter((u) => th.counts[u.keyword] != null && matchQ(u.keyword))
+    .sort((a, b) => th.counts[b.keyword] - th.counts[a.keyword]);
+  const getCat = (u) => u.category;
+  const days = th.expiresAt ? Math.round((new Date(th.expiresAt) - Date.now()) / 86400e3) : null;
+  return intro(`통합 상위 100개 키워드가 스레드에서 최근 24시간 동안 얼마나 올라왔는지 (게시물 수, 최대 100)${days != null && days < 10 ? ` · ⚠️ 스레드 토큰 ${days}일 후 만료` : ''}`) +
+    catBar(units, getCat) + listOr(units.filter(byCat(getCat)).map((u, i) => row({
+      i, k: u.keyword, cat: u.category,
+      right: `<a class="muted" href="https://www.threads.net/search?q=${encodeURIComponent(u.keyword)}" target="_blank" rel="noopener">열기 ↗</a>`,
+    })));
+}
+
 const SOON = {
   tiktok: ['틱톡', '틱톡 트렌드(Creative Center)가 로그인 필수로 바뀌어 틱톡 비즈니스 계정이나 외부 수집 서비스(Apify 등)가 필요해요.'],
   instagram: ['인스타그램', '인스타는 공식 API에 트렌드 목록이 없어요. 비즈니스 계정 + Meta 앱 심사 후 지정한 해시태그의 인기 게시물만 볼 수 있어요.'],
@@ -328,7 +347,7 @@ const pageSoon = (id) => `<div class="card soon"><h3>${SOON[id][0]}은 준비 �
 function render() {
   $('#menu').innerHTML = PAGES.map((p) => `<a href="#${p.id}" class="${st.page === p.id ? 'on' : ''}">${
     p.color ? `<span class="dot" style="background:${p.color}"></span>` : ''}${p.name}${p.soon ? '<span class="soon-tag">준비 중</span>' : ''}</a>`).join('');
-  const fn = { all: pageAll, google: pageGoogle, naver: pageNaver, youtube: pageYoutube, tiktok: pageTiktok }[st.page];
+  const fn = { all: pageAll, google: pageGoogle, naver: pageNaver, youtube: pageYoutube, tiktok: pageTiktok, threads: pageThreads }[st.page];
   $('#page').innerHTML = fn ? fn() : pageSoon(st.page);
 }
 
