@@ -408,6 +408,25 @@ function buildUnified({ trends, rising, shopping, youtube, tiktok }) {
   }).sort((a, b) => b.score - a.score);
 }
 
+// ── 검색엔진용 정적 내용 ─────────────────────────────────────────
+// 화면은 자바스크립트로 그리지만, 검색엔진이 바로 읽을 수 있게 오늘의 통합 순위를 index.html에 미리 써 둔다
+const SITE = 'https://keyword.8282ok.com';
+async function writeSeo(snap) {
+  const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const PF = { google: '구글', naver: '네이버', youtube: '유튜브', tiktok: '틱톡' };
+  const items = (snap.unified || []).slice(0, 50).map((u) =>
+    `<li><b>${esc(u.keyword)}</b> · ${esc(u.category)} · ${u.platforms.map((p) => PF[p]).join('·')}</li>`).join('');
+  const block = `<!--SEO--><section class="seo"><h2>${snap.date} 오늘의 트렌드 키워드 통합 순위</h2>` +
+    `<p>구글 급상승, 네이버 급상승·쇼핑 인기, 유튜브 인기 영상, 틱톡 인기 해시태그를 합쳐 매긴 순위예요.</p><ol>${items}</ol></section><!--/SEO-->`;
+  const path = `${ROOT}index.html`;
+  const html = await readFile(path, 'utf8');
+  await writeFile(path, html.replace(/<!--SEO-->[\s\S]*?<!--\/SEO-->/, block));
+
+  const pages = ['/', '/google', '/naver', '/youtube', '/tiktok', '/threads', '/privacy'];
+  await writeFile(`${ROOT}sitemap.xml`, `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${
+    pages.map((p) => `  <url><loc>${SITE}${p}</loc><lastmod>${snap.date}</lastmod><changefreq>${p === '/privacy' ? 'yearly' : 'daily'}</changefreq></url>`).join('\n')}\n</urlset>\n`);
+}
+
 // ── 실행 ─────────────────────────────────────────────────────────
 async function readJSON(p, fallback) {
   try { return JSON.parse(await readFile(p, 'utf8')); } catch { return fallback; }
@@ -553,6 +572,8 @@ async function main() {
   await writeFile(`${ROOT}data/latest.json`, JSON.stringify(snapshot));
   const dates = [...new Set([...index.dates, date])].sort().slice(-90);
   await writeFile(`${ROOT}data/index.json`, JSON.stringify({ dates }));
+
+  await writeSeo(snapshot);
 
   console.log(`✔ ${date}: 구글 ${trends.length}개, 유튜브 ${youtube ? youtube.videos.length + '개' : '키 없음'}, ` +
     `연관검색어 ${targets.length}개, 데이터랩 ${datalab ? Object.keys(datalab).length + '개(급상승 ' + rising.length + ')' : '키 없음'}, 블로그 ${blog ? Object.keys(blog).length + '개' : '키 없음'}, 검색광고 ${searchad ? 'O' : '키 없음'}, 쇼핑 ${shopping ? shopping.categories.length + '개 분야' : 'X'}, 틱톡 ${tiktok ? tiktok.hashtags.length + '개' : '키 없음'}, 스레드 ${threads ? Object.keys(threads.counts).length + '개' : '키 없음'}`);

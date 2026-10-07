@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://keyword.8282ok.com/sitemap.xml
