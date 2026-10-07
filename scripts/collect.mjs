@@ -283,16 +283,24 @@ async function tiktokTrending() {
   const items = await res.json();
   if (items[0]) console.log('틱톡 결과 필드:', Object.keys(items[0]).join(', '));
   const pick = (o, ...ks) => ks.map((k) => k.split('.').reduce((a, x) => a?.[x], o)).find((v) => v != null && v !== '');
+  // 필드 이름은 'Hashtag', 'Video Views'처럼 공백 포함 대문자 (2026-10-07 실제 응답 기준)
+  const industryOf = (v) => {
+    const x = Array.isArray(v) ? v[0] : v;
+    return (typeof x === 'string' ? x : x?.value || x?.name || x?.label) || null;
+  };
   const hashtags = items.map((it, i) => ({
-    keyword: String(pick(it, 'hashtagName', 'hashtag_name', 'hashtag', 'name') || '').replace(/^#/, ''),
-    rank: +pick(it, 'rank') || i + 1,
-    views: +pick(it, 'videoViews', 'video_views', 'views', 'viewCount') || 0,
-    posts: +pick(it, 'publishCnt', 'publish_cnt', 'posts', 'videoCount') || 0,
-    industry: pick(it, 'industryInfo.value', 'industry_info.value', 'industry.value', 'industry') || null,
-    rankDiff: pick(it, 'rankDiff', 'rank_diff') ?? null,
-    isNew: !!pick(it, 'isNew', 'is_new', 'isNewOnBoard'),
+    keyword: String(pick(it, 'Hashtag', 'hashtagName', 'hashtag_name', 'hashtag', 'name') || '').replace(/^#/, '').trim(),
+    rank: +pick(it, 'Rank', 'rank') || i + 1,
+    views: +pick(it, 'Video Views', 'videoViews', 'video_views') || 0,
+    posts: +pick(it, 'Posts', 'publishCnt', 'posts') || 0,
+    industry: industryOf(pick(it, 'Industries', 'Industry', 'industryInfo', 'industry')),
+    trend: pick(it, 'Trend Direction') || null,
+    isNew: !!pick(it, 'Is New', 'isNew'),
   })).filter((h) => h.keyword).sort((a, b) => a.rank - b.rank);
-  if (!hashtags.length) throw new Error('틱톡 해시태그 0건');
+  if (!hashtags.length) {
+    console.log('틱톡 첫 결과 예시:', JSON.stringify(items[0] || null).slice(0, 600));
+    throw new Error('틱톡 해시태그 0건');
+  }
   return { fetchedAt: new Date().toISOString(), hashtags };
 }
 
@@ -402,7 +410,7 @@ async function main() {
   let youtube = existing?.youtube || null;
   try { youtube = (await youtubeTrending()) || youtube; } catch (e) { errors.youtube = e.message; }
 
-  // 틱톡은 비용 때문에 하루 한 번만 받는다 (그날 첫 성공 이후로는 재사용)
+  // 틱톡은 비용 때문에 하루 한 번, 00시 갱신 때 받는다. 00시에 실패했을 때만 다음 갱신에서 다시 시도한다
   let tiktok = existing?.tiktok || null;
   if (!tiktok) {
     try { tiktok = await tiktokTrending(); } catch (e) { errors.tiktok = e.message; }
