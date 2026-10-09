@@ -340,8 +340,8 @@ async function threadsReaction(keywords) {
 
 // ── 스레드 반응: Apify (공식 API는 앱 심사 전이라 본인 게시물만 검색돼서 대신 쓴다) ──
 // scrapersdelight/threads-keyword-search-scraper: 게시물 1개 0.001달러, 실행 1번에 키워드 여러 개.
-// 하루 1번(00시) × 통합 상위 15개 × 최근 24시간 인기 게시물 5개 = 75개 ≈ 하루 0.08달러 (틱톡과 합쳐 월 5달러 무료 크레딧 안)
-const THREADS_KEYWORDS = 15;
+// 하루 1번(00시) × 통합 상위 12개 × 최근 24시간 인기 게시물 5개 = 60개 ≈ 하루 0.06달러
+const THREADS_KEYWORDS = 12; // 인스타와 합쳐 무료 크레딧 안에 들도록 15 → 12
 const THREADS_POSTS_PER_KEYWORD = 5;
 async function threadsApify(keywords) {
   if (!env.APIFY_TOKEN) return null;
@@ -364,6 +364,41 @@ async function threadsApify(keywords) {
     engagement[k] += (+it.likeCount || 0) + (+it.replyCount || 0) + (+it.repostCount || 0);
   }
   return { source: 'apify', fetchedAt: new Date().toISOString(), counts, engagement, postsPerKeyword: THREADS_POSTS_PER_KEYWORD };
+}
+
+// ── 인스타그램 해시태그 (APIFY_TOKEN 필요) ───────────────────────
+// apify/instagram-hashtag-analytics-scraper: 해시태그 1개 0.0023달러 + 실행 0.001달러.
+// 하루 1번(00시) × 통합 상위 15개 ≈ 하루 0.036달러. 전체 게시물 수와 관련 해시태그를 받고, 어제와 비교해 하루 증가량을 계산한다.
+// 월 비용: 틱톡 약 1.7 + 스레드 약 1.9 + 인스타 약 1.1 = 약 4.7달러 (무료 5달러)
+const INSTAGRAM_KEYWORDS = 15;
+const toHashtag = (k) => k.replace(/[\s#·.,'"!?()\[\]{}:;/\\&+-]/g, '');
+async function instagramHashtags(keywords) {
+  if (!env.APIFY_TOKEN) return null;
+  const tags = [...new Set(keywords.map(toHashtag).filter((t) => t.length >= 2))];
+  const res = await fetch('https://api.apify.com/v2/acts/apify~instagram-hashtag-analytics-scraper/run-sync-get-dataset-items?timeout=280', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${env.APIFY_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ hashtags: tags, includeLatestPosts: false, includeTopPosts: false }),
+  });
+  if (!res.ok) throw new Error(`apify instagram ${res.status} ${(await res.text()).slice(0, 200)}`);
+  const items = await res.json();
+  if (items[0]) console.log('인스타 결과 필드:', Object.keys(items[0]).join(', '));
+  const byTag = {};
+  for (const it of items) {
+    const name = String(it.name || it.id || '').replace(/^#/, '');
+    if (!name) continue;
+    byTag[name.toLowerCase()] = {
+      posts: +it.postsCount || 0,
+      related: (it.related || []).slice(0, 10).map((r) => r.hash || r.name || r).filter((x) => typeof x === 'string'),
+    };
+  }
+  // 키워드 → 해시태그 결과로 되돌린다
+  const result = {};
+  for (const k of keywords) {
+    const r = byTag[toHashtag(k).toLowerCase()];
+    if (r) result[k] = { tag: toHashtag(k), ...r };
+  }
+  return { source: 'apify', fetchedAt: new Date().toISOString(), tags: result };
 }
 
 // ── 분야 분류 ───────────────────────────────────────────────────
@@ -483,6 +518,11 @@ function pageDefs(snap) {
       desc: `${d} 틱톡 한국 인기 해시태그 순위와 게시물 수, 조회수.`,
       body: `<h2>${d} 틱톡 인기 해시태그</h2><p>틱톡 Creative Center 기준 최근 7일 한국 인기 해시태그예요.</p>${
         li((snap.tiktok?.hashtags || []).map((h) => `<li><b>#${escH(h.keyword)}</b>${h.views ? ` · 조회 ${fmtN(h.views)}` : ''}</li>`))}` },
+    instagram: { path: '/instagram', title: `인스타그램 해시태그 반응 (${d})`,
+      desc: `${d} 트렌드 키워드의 인스타그램 해시태그 게시물 수와 하루 증가량, 관련 해시태그.`,
+      body: `<h2>${d} 인스타그램 해시태그 반응</h2><p>통합 순위 상위 키워드를 해시태그로 바꿔 인스타그램 전체 게시물 수와 관련 해시태그를 모았어요.</p>${
+        li(Object.values(snap.instagram?.tags || {}).sort((a, b) => (b.dayGrowth ?? -1) - (a.dayGrowth ?? -1) || b.posts - a.posts).map((t) =>
+          `<li><b>#${escH(t.tag)}</b> · 게시물 ${fmtN(t.posts)}${t.dayGrowth != null ? ` · 하루 +${fmtN(t.dayGrowth)}` : ''}${t.related?.length ? ` · 관련: ${t.related.slice(0, 5).map((r) => '#' + escH(r)).join(' ')}` : ''}</li>`))}` },
     threads: { path: '/threads', title: `스레드 키워드 반응 (${d})`,
       desc: `${d} 트렌드 키워드가 스레드에서 최근 24시간 동안 얼마나 언급됐는지.`,
       body: `<h2>${d} 스레드 키워드 반응</h2><p>통합 순위 상위 키워드가 스레드에 최근 24시간 동안 올라온 게시물 수예요.</p>${
@@ -491,7 +531,7 @@ function pageDefs(snap) {
   };
 }
 
-const NAV_LINKS = `<nav aria-label="플랫폼별 트렌드"><a href="/">통합 순위</a><a href="/google">구글 급상승</a><a href="/naver">네이버 급상승·쇼핑</a><a href="/youtube">유튜브 인기</a><a href="/tiktok">틱톡 해시태그</a><a href="/threads">스레드 반응</a><a href="/day">지난 트렌드</a></nav>`;
+const NAV_LINKS = `<nav aria-label="플랫폼별 트렌드"><a href="/">통합 순위</a><a href="/google">구글 급상승</a><a href="/naver">네이버 급상승·쇼핑</a><a href="/youtube">유튜브 인기</a><a href="/tiktok">틱톡 해시태그</a><a href="/instagram">인스타 해시태그</a><a href="/threads">스레드 반응</a><a href="/day">지난 트렌드</a></nav>`;
 function headFor(def, date) {
   const url = SITE + def.path;
   const title = `${def.title} · ${SITE_NAME}`;
@@ -748,6 +788,23 @@ async function main() {
     const official = await threadsReaction(unified.slice(0, 100).map((u) => u.keyword));
     if (official && Object.keys(official.counts).length) { threads = official; updated.threads = now; }
   } catch (e) { errors.threads = e.message; }
+  // 인스타는 하루 1번(그날 첫 갱신)만 받고, 어제 게시물 수와 비교해 하루 증가량을 붙인다
+  let instagram = existing?.instagram || null;
+  if (!instagram) {
+    try {
+      instagram = await instagramHashtags(unified.slice(0, INSTAGRAM_KEYWORDS).map((u) => u.keyword));
+      if (instagram) updated.instagram = now;
+    } catch (e) { errors.instagram = e.message; }
+    if (instagram) updated.instagram = updated.instagram || now;
+    if (instagram && prev?.instagram) {
+      const before = Object.fromEntries(Object.values(prev.instagram.tags).map((t) => [t.tag.toLowerCase(), t.posts]));
+      for (const t of Object.values(instagram.tags)) {
+        const b = before[t.tag.toLowerCase()];
+        t.dayGrowth = b != null && t.posts >= b ? t.posts - b : null;
+      }
+    }
+  }
+
   if (!threads) {
     threads = existing?.threads?.source === 'apify' ? existing.threads : null;
     if (!threads) {
@@ -777,6 +834,7 @@ async function main() {
 
   // 이 기능을 넣기 전에 받아 둔 데이터는 그 스냅샷이 만들어진 시각을 갱신 시각으로 본다
   const had = { google: trends.length, youtube, tiktok, naverShopping: shopping, naverRising: datalab, threads };
+  // (instagram은 아래에서 별도로 갱신 시각을 기록)
   for (const [k, v] of Object.entries(had)) if (v && !updated[k]) updated[k] = tiktok && k === 'tiktok' ? tiktok.fetchedAt : existing?.generatedAt || now;
 
   const snapshot = {
@@ -792,6 +850,7 @@ async function main() {
       naverShopping: !!shopping,
       tiktok: !!tiktok,
       threads: !!threads,
+      instagram: !!instagram,
     },
     google: trends,
     youtube,
@@ -801,6 +860,7 @@ async function main() {
     naverShopping: shopping,
     tiktok,
     threads,
+    instagram,
     naver: { datalab, searchad, rising, blog },
     errors,
   };
@@ -813,10 +873,10 @@ async function main() {
 
   await writeSeo(snapshot, dates);
   // 깃허브 액션에서만 알린다 (배포 전에 알리면 옛 페이지를 가져가므로 몇 분 늦게 수집돼도 괜찮다)
-  if (env.GITHUB_ACTIONS) await pingIndexNow(['/', '/google', '/naver', '/youtube', '/tiktok', '/threads', '/day', `/day/${date}`].map((p) => SITE + p));
+  if (env.GITHUB_ACTIONS) await pingIndexNow(['/', '/google', '/naver', '/youtube', '/tiktok', '/instagram', '/threads', '/day', `/day/${date}`].map((p) => SITE + p));
 
   console.log(`✔ ${date}: 구글 ${trends.length}개, 유튜브 ${youtube ? youtube.videos.length + '개' : '키 없음'}, ` +
-    `연관검색어 ${targets.length}개, 데이터랩 ${datalab ? Object.keys(datalab).length + '개(급상승 ' + rising.length + ')' : '키 없음'}, 블로그 ${blog ? Object.keys(blog).length + '개' : '키 없음'}, 검색광고 ${searchad ? 'O' : '키 없음'}, 쇼핑 ${shopping ? shopping.categories.length + '개 분야' : 'X'}, 틱톡 ${tiktok ? tiktok.hashtags.length + '개' : '키 없음'}, 스레드 ${threads ? Object.keys(threads.counts).length + '개' : '키 없음'}`);
+    `연관검색어 ${targets.length}개, 데이터랩 ${datalab ? Object.keys(datalab).length + '개(급상승 ' + rising.length + ')' : '키 없음'}, 블로그 ${blog ? Object.keys(blog).length + '개' : '키 없음'}, 검색광고 ${searchad ? 'O' : '키 없음'}, 쇼핑 ${shopping ? shopping.categories.length + '개 분야' : 'X'}, 틱톡 ${tiktok ? tiktok.hashtags.length + '개' : '키 없음'}, 스레드 ${threads ? Object.keys(threads.counts).length + '개' : '키 없음'}, 인스타 ${instagram ? Object.keys(instagram.tags).length + '개' : '없음'}`);
   if (Object.keys(errors).length) console.warn('오류:', errors);
 }
 

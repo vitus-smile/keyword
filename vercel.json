@@ -14,12 +14,8 @@
   ],
   "rewrites": [
     {
-      "source": "/:page(google|naver|youtube|tiktok|threads)",
+      "source": "/:page(google|naver|youtube|tiktok|instagram|threads)",
       "destination": "/p/:page.html"
-    },
-    {
-      "source": "/instagram",
-      "destination": "/"
     },
     {
       "source": "/day",
