@@ -382,13 +382,16 @@ async function instagramHashtags(keywords) {
   });
   if (!res.ok) throw new Error(`apify instagram ${res.status} ${(await res.text()).slice(0, 200)}`);
   const items = await res.json();
-  if (items[0]) console.log('인스타 결과 필드:', Object.keys(items[0]).join(', '));
+  console.log('인스타 요청:', tags.join(', '));
+  console.log('인스타 응답:', items.map((it) => `${it.name}|${it.postsCount}|${it.searchSource ?? ''}`).join(', ') || '(없음)');
+  if (items[0]) console.log('인스타 예시:', JSON.stringify(items[0]).slice(0, 500));
   const byTag = {};
   for (const it of items) {
     const name = String(it.name || it.id || '').replace(/^#/, '');
     if (!name) continue;
     byTag[name.toLowerCase()] = {
       posts: +it.postsCount || 0,
+      perDay: +it.postsPerDay || null,
       related: (it.related || []).slice(0, 10).map((r) => r.hash || r.name || r).filter((x) => typeof x === 'string'),
     };
   }
@@ -398,7 +401,7 @@ async function instagramHashtags(keywords) {
     const r = byTag[toHashtag(k).toLowerCase()];
     if (r) result[k] = { tag: toHashtag(k), ...r };
   }
-  return { source: 'apify', fetchedAt: new Date().toISOString(), tags: result };
+  return { source: 'apify', fetchedAt: new Date().toISOString(), tags: result, attempts: 1 };
 }
 
 // ── 분야 분류 ───────────────────────────────────────────────────
@@ -790,6 +793,12 @@ async function main() {
   } catch (e) { errors.threads = e.message; }
   // 인스타는 하루 1번(그날 첫 갱신)만 받고, 어제 게시물 수와 비교해 하루 증가량을 붙인다
   let instagram = existing?.instagram || null;
+  // 결과가 거의 비었으면 그날 한 번만 다시 시도한다 (비용 때문에 최대 2번)
+  if (instagram && Object.keys(instagram.tags).length < 5 && (instagram.attempts || 1) < 2) {
+    const tries = (instagram.attempts || 1) + 1;
+    instagram = null;
+    try { instagram = await instagramHashtags(unified.slice(0, INSTAGRAM_KEYWORDS).map((u) => u.keyword)); if (instagram) instagram.attempts = tries; } catch (e) { errors.instagram = e.message; }
+  }
   if (!instagram) {
     try {
       instagram = await instagramHashtags(unified.slice(0, INSTAGRAM_KEYWORDS).map((u) => u.keyword));
