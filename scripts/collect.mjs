@@ -338,6 +338,34 @@ async function threadsReaction(keywords) {
   return { expiresAt, tokenHash, tokenFirstSeen: firstSeen, counts, error: Object.keys(counts).length ? null : lastError };
 }
 
+// ── 스레드 반응: Apify (공식 API는 앱 심사 전이라 본인 게시물만 검색돼서 대신 쓴다) ──
+// scrapersdelight/threads-keyword-search-scraper: 게시물 1개 0.001달러, 실행 1번에 키워드 여러 개.
+// 하루 1번(00시) × 통합 상위 15개 × 최근 24시간 인기 게시물 5개 = 75개 ≈ 하루 0.08달러 (틱톡과 합쳐 월 5달러 무료 크레딧 안)
+const THREADS_KEYWORDS = 15;
+const THREADS_POSTS_PER_KEYWORD = 5;
+async function threadsApify(keywords) {
+  if (!env.APIFY_TOKEN) return null;
+  const res = await fetch('https://api.apify.com/v2/acts/scrapersdelight~threads-keyword-search-scraper/run-sync-get-dataset-items?timeout=280', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${env.APIFY_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ keywords, searchType: 'top', maxPostsPerKeyword: THREADS_POSTS_PER_KEYWORD,
+      maxItems: keywords.length * THREADS_POSTS_PER_KEYWORD, postedWithinDays: 1, excludeReplies: true }),
+  });
+  if (!res.ok) throw new Error(`apify threads ${res.status} ${(await res.text()).slice(0, 200)}`);
+  const items = await res.json();
+  if (items[0]) console.log('스레드 결과 필드:', Object.keys(items[0]).join(', '));
+  // 작성자 정보는 저장하지 않고 키워드별 합계만 남긴다
+  const counts = Object.fromEntries(keywords.map((k) => [k, 0]));
+  const engagement = Object.fromEntries(keywords.map((k) => [k, 0]));
+  for (const it of items) {
+    const k = it.searchKeyword ?? it.keyword;
+    if (!(k in counts)) continue;
+    counts[k] += 1;
+    engagement[k] += (+it.likeCount || 0) + (+it.replyCount || 0) + (+it.repostCount || 0);
+  }
+  return { source: 'apify', fetchedAt: new Date().toISOString(), counts, engagement, postsPerKeyword: THREADS_POSTS_PER_KEYWORD };
+}
+
 // ── 분야 분류 ───────────────────────────────────────────────────
 // 모든 플랫폼을 같은 분야 이름으로 맞춘다
 const CATEGORIES = ['연예·방송', '음악', '스포츠', '게임', '뉴스·사회', '경제·재테크', 'IT·가전', '패션·뷰티',
@@ -458,7 +486,8 @@ function pageDefs(snap) {
     threads: { path: '/threads', title: `스레드 키워드 반응 (${d})`,
       desc: `${d} 트렌드 키워드가 스레드에서 최근 24시간 동안 얼마나 언급됐는지.`,
       body: `<h2>${d} 스레드 키워드 반응</h2><p>통합 순위 상위 키워드가 스레드에 최근 24시간 동안 올라온 게시물 수예요.</p>${
-        li(Object.entries(snap.threads?.counts || {}).sort((a, b) => b[1] - a[1]).slice(0, 30).map(([k, n]) => `<li><b>${escH(k)}</b> · ${n >= 100 ? '100+' : n}개</li>`))}` },
+        li(Object.entries(snap.threads?.engagement || snap.threads?.counts || {}).sort((a, b) => b[1] - a[1]).slice(0, 30).map(([k, n]) =>
+          `<li><b>${escH(k)}</b> · ${snap.threads?.engagement ? `반응 ${fmtN(n)}` : `${n >= 100 ? '100+' : n}개`}</li>`))}` },
   };
 }
 
@@ -714,7 +743,20 @@ async function main() {
   const unified = buildUnified({ trends, rising, shopping, youtube, tiktok });
   let threads = null;
   prevThreadsInfo = existing?.threads || prev?.threads || null;
-  try { threads = await threadsReaction(unified.slice(0, 100).map((u) => u.keyword)); if (threads) updated.threads = now; } catch (e) { errors.threads = e.message; }
+  // 공식 API에 결과가 있으면 그걸 쓰고(앱 심사 통과 후), 아니면 Apify로 하루 1번 받는다
+  try {
+    const official = await threadsReaction(unified.slice(0, 100).map((u) => u.keyword));
+    if (official && Object.keys(official.counts).length) { threads = official; updated.threads = now; }
+  } catch (e) { errors.threads = e.message; }
+  if (!threads) {
+    threads = existing?.threads?.source === 'apify' ? existing.threads : null;
+    if (!threads) {
+      try {
+        threads = await threadsApify(unified.slice(0, THREADS_KEYWORDS).map((u) => u.keyword));
+        if (threads) updated.threads = now;
+      } catch (e) { errors.threadsApify = e.message; }
+    }
+  }
   const catOf = new Map(unified.map((u) => [norm(u.keyword), u.category]));
   const cat = (k) => catOf.get(norm(k)) || ruleCategory(k) || '기타';
   for (const t of trends) t.category = cat(t.keyword);

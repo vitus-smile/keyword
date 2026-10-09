@@ -190,7 +190,12 @@ function toast(msg) {
 }
 const tagBtn = (k) => `<button class="tag" data-copy="${esc(k)}">${esc(k)}</button>`;
 function threadsOf(k) {
-  const n = data.threads?.counts?.[k];
+  const th = data.threads;
+  if (th?.source === 'apify') {
+    const e = th.engagement?.[k];
+    return e == null ? '' : `<span class="blog" title="스레드 최근 24시간 인기 게시물의 좋아요·답글·리포스트 합">스레드 반응 ${fmt(e)}</span>`;
+  }
+  const n = th?.counts?.[k];
   if (n == null) return '';
   return `<span class="blog" title="스레드 최근 24시간 게시물 수">스레드 ${n >= 100 ? '100+' : n}</span>`;
 }
@@ -256,7 +261,7 @@ const SCHEDULE = {
   naverShopping: ['네이버 쇼핑 인기', '하루 1번 (00시) · 어제 하루 기준', 'naverShopping'],
   youtube: ['유튜브 인기', '하루 4번 (00·06·12·18시)', 'youtube'],
   tiktok: ['틱톡 인기 해시태그', '하루 1번 (00시) · 최근 7일 기준', 'tiktok'],
-  threads: ['스레드 반응', '하루 4번 (00·06·12·18시) · 최근 24시간 기준', 'threads'],
+  threads: ['스레드 반응', '하루 1번 (00시) · 최근 24시간 인기 게시물 기준', 'threads'],
   all: ['통합 순위', '하루 4번 (00·06·12·18시) · 각 플랫폼 데이터를 합쳐 다시 계산', null],
 };
 const fmtTime = (iso) => iso ? new Date(iso).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '아직 없음';
@@ -378,17 +383,19 @@ function pageTiktok() {
 
 function pageThreads() {
   const th = data.threads;
-  if (!th) return schedBar('threads') + empty('<b>스레드 토큰이 연결되지 않았어요.</b>');
-  if (th.error && !Object.keys(th.counts).length) return schedBar('threads') + empty(`<b>스레드 검색 권한을 준비 중이에요.</b> (${esc(th.error)})`);
-  const units = (data.unified || []).filter((u) => th.counts[u.keyword] != null && matchQ(u.keyword))
-    .sort((a, b) => th.counts[b.keyword] - th.counts[a.keyword]);
+  if (!th) return schedBar('threads') + empty('<b>스레드는 매일 00시에 하루 한 번 받아요.</b> 아직 이 날짜의 데이터가 없어요.');
+  const apify = th.source === 'apify';
+  const score = (k) => apify ? th.engagement[k] : th.counts[k];
+  const units = (data.unified || []).filter((u) => score(u.keyword) != null && matchQ(u.keyword))
+    .sort((a, b) => score(b.keyword) - score(a.keyword));
   const getCat = (u) => u.category;
-  const days = th.expiresAt ? Math.round((new Date(th.expiresAt) - Date.now()) / 86400e3) : null;
-  return schedBar('threads') + intro(`통합 상위 100개 키워드가 스레드에서 최근 24시간 동안 얼마나 올라왔는지 (게시물 수, 최대 100)${days != null && days < 10 ? ` · ⚠️ 스레드 토큰 ${days}일 후 만료` : ''}`) +
-    catBar(units, getCat) + listOr(units.filter(byCat(getCat)).map((u, i) => row({
-      i, k: u.keyword, cat: u.category,
-      right: `<a class="muted" href="https://www.threads.net/search?q=${encodeURIComponent(u.keyword)}" target="_blank" rel="noopener">열기 ↗</a>`,
-    })));
+  const note = apify
+    ? `통합 순위 상위 ${Object.keys(th.counts).length}개 키워드를 스레드에서 검색해, 최근 24시간 인기 게시물(최대 ${th.postsPerKeyword}개)의 좋아요·답글·리포스트를 더한 반응 순위예요.`
+    : '통합 상위 100개 키워드가 스레드에서 최근 24시간 동안 얼마나 올라왔는지 (게시물 수, 최대 100)';
+  return schedBar('threads') + intro(note) + catBar(units, getCat) + listOr(units.filter(byCat(getCat)).map((u, i) => row({
+    i, k: u.keyword, cat: u.category,
+    right: `${apify ? `<span class="muted">게시물 ${th.counts[u.keyword]}개</span>` : ''}<a class="muted" href="https://www.threads.com/search?q=${encodeURIComponent(u.keyword)}" target="_blank" rel="noopener">열기 ↗</a>`,
+  })));
 }
 
 const SOON = {
