@@ -89,7 +89,7 @@ nav{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid
 .b-new{background:color-mix(in srgb,var(--hot) 15%,transparent);color:var(--hot)}
 .b-streak{background:var(--accent-soft);color:var(--accent)}
 .pf{font-size:11px;font-weight:700;padding:2px 6px;border-radius:5px;color:#fff;white-space:nowrap}
-.pf.google{background:var(--google)} .pf.naver{background:var(--naver)} .pf.youtube{background:var(--youtube)} .pf.tiktok{background:var(--tiktok);color:var(--bg)}
+.pf.google{background:var(--google)} .pf.naver{background:var(--naver)} .pf.youtube{background:var(--youtube)} .pf.tiktok{background:var(--tiktok);color:var(--bg)} .pf.instagram{background:var(--instagram)} .pf.threads{background:var(--threads);color:var(--bg)}
 .right{margin-left:auto;display:flex;align-items:center;gap:10px}
 .score{font-weight:900;font-size:15px}
 .score small{font-weight:400;color:var(--muted);font-size:11px;margin-left:2px}
@@ -178,7 +178,7 @@ const PAGES = [
   { id: 'instagram', name: '인스타', color: 'var(--instagram)' },
   { id: 'threads', name: '스레드', color: 'var(--threads)' },
 ];
-const PF_NAME = { google: '구글', naver: '네이버', youtube: '유튜브', tiktok: '틱톡' };
+const PF_NAME = { google: '구글', naver: '네이버', youtube: '유튜브', tiktok: '틱톡', instagram: '인스타', threads: '스레드' };
 const st = { page: 'all', sub: {}, cat: '전체', q: '' };
 let data = null;
 let catOf = new Map();
@@ -291,9 +291,10 @@ function schedTable() {
 const LOGIC = `<details class="card logic"><summary>통합 순위는 이렇게 매겨요</summary>
   <ol>
     <li><b>플랫폼별 점수</b>: 구글 급상승, 네이버 급상승, 유튜브 인기 키워드, 틱톡 인기 해시태그에서 1위면 100점, 순위가 내려갈수록 점수가 줄어요.</li>
+    <li><b>인스타·스레드 반응</b>: 상위 키워드를 인스타 해시태그와 스레드에서 검색해, 반응이 큰 순서대로 같은 방식으로 점수를 줘요. 인스타는 어제보다 늘어난 게시물 수, 스레드는 최근 24시간 인기 게시물의 좋아요·답글·리포스트 합이 기준이에요. 반응이 0이면 점수가 없어요.</li>
     <li><b>네이버 쇼핑</b>: 분야가 10개라 1위가 10개나 나와서 70%만 쳐줘요 (분야 1위 = 70점).</li>
     <li><b>한 플랫폼에서는 가장 높은 점수 하나만</b> 세요. 네이버 급상승과 쇼핑에 둘 다 있어도 더 높은 쪽만 들어가요.</li>
-    <li><b>여러 플랫폼에 동시에 뜨면 보너스</b>: 플랫폼이 하나 늘 때마다 +50점. 여기저기서 동시에 뜨는 키워드가 진짜 대세라서요.</li>
+    <li><b>여러 플랫폼에 동시에 뜨면 보너스</b>: 플랫폼이 하나 늘 때마다 +50점. 여기저기서 동시에 뜨는 키워드가 진짜 대세라서요. 인스타·스레드는 반응 순위 상위 절반에 들 때만 보너스에 세요.</li>
   </ol>
   <div class="ex">키워드를 누르면 점수가 어디서 왔는지 볼 수 있어요.</div>
 </details>`;
@@ -308,7 +309,7 @@ function pageAll() {
     badges: u.platforms.map((p) => `<span class="pf ${p}">${PF_NAME[p]}</span>`).join(''),
     right: `<span class="score">${u.score}<small>점</small></span>`,
     pre: `<div class="signals">${u.signals.map((s) => `<span>${esc(s.label)}<b>${s.points}점</b></span>`).join('')}${
-      u.platforms.length > 1 ? `<span>${u.platforms.length}개 플랫폼 보너스<b>+${50 * (u.platforms.length - 1)}점</b></span>` : ''}</div>`,
+      (u.bonus ?? 50 * (u.platforms.length - 1)) > 0 ? `<span>여러 플랫폼 보너스<b>+${u.bonus ?? 50 * (u.platforms.length - 1)}점</b></span>` : ''}</div>`,
   })));
 }
 

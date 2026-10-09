@@ -442,9 +442,9 @@ function ruleCategory(text) {
 // ── 통합 순위 ───────────────────────────────────────────────────
 // 플랫폼마다 1위 100점에서 순위가 내려갈수록 점수가 줄어든다.
 // 쇼핑은 분야가 10개라 1위가 10개 나오므로 70%만 반영한다. 한 플랫폼 안에서는 가장 높은 점수 하나만 센다.
-// 여러 플랫폼(구글·네이버·유튜브·틱톡)에 동시에 뜨면 플랫폼 하나 늘 때마다 +50점.
+// 여러 플랫폼(구글·네이버·유튜브·틱톡·인스타·스레드)에 동시에 뜨면 플랫폼 하나 늘 때마다 +50점.
 const norm = (k) => k.replace(/\s+/g, '').toLowerCase();
-function buildUnified({ trends, rising, shopping, youtube, tiktok }) {
+function buildUnified({ trends, rising, shopping, youtube, tiktok, instagram, threads }) {
   const map = new Map();
   const add = (kw, platform, label, points, catHint) => {
     const id = norm(kw);
@@ -467,6 +467,20 @@ function buildUnified({ trends, rising, shopping, youtube, tiktok }) {
   (tiktok?.hashtags || []).forEach((h, i) => add(h.keyword, 'tiktok', `틱톡 해시태그 ${h.rank}위`, pts(i, tiktok.hashtags.length),
     TIKTOK_INDUSTRY_TO_CAT[h.industry] ? `tt:${TIKTOK_INDUSTRY_TO_CAT[h.industry]}` : null));
 
+  // 인스타·스레드는 통합 상위 키워드만 재는 '반응' 지표라, 반응이 있는(0보다 큰) 키워드끼리 순위를 매겨 점수를 준다.
+  // 인스타는 어제보다 늘어난 게시물 수(없으면 전체 게시물 수), 스레드는 최근 24시간 인기 게시물의 좋아요·답글·리포스트 합
+  const reactRank = (entries) => entries.filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+  if (instagram?.tags) {
+    const tags = Object.entries(instagram.tags);
+    const growth = tags.some(([, t]) => t.dayGrowth != null);
+    const ranked = reactRank(tags.map(([k, t]) => [k, growth ? t.dayGrowth ?? 0 : t.posts]));
+    ranked.forEach(([k], i) => add(k, 'instagram', growth ? `인스타 하루 증가 ${i + 1}위` : `인스타 게시물 수 ${i + 1}위`, pts(i, ranked.length), null));
+  }
+  if (threads?.engagement || threads?.counts) {
+    const ranked = reactRank(Object.entries(threads.engagement || threads.counts));
+    ranked.forEach(([k], i) => add(k, 'threads', `스레드 반응 ${i + 1}위`, pts(i, ranked.length), null));
+  }
+
   return [...map.values()].map((e) => {
     // 플랫폼마다 가장 높은 점수 하나만 센다
     const best = {};
@@ -477,8 +491,10 @@ function buildUnified({ trends, rising, shopping, youtube, tiktok }) {
     const rule = e.hints.find((h) => !h.includes(':')) || ruleCategory(e.keyword);
     const yt = e.hints.find((h) => h.startsWith('yt:') || h.startsWith('tt:'));
     const category = shop?.slice(5) || rule || yt?.slice(3) || '기타';
+    // 보너스는 트렌드 플랫폼은 그대로 세고, 인스타·스레드는 반응 상위 절반(50점 이상)일 때만 센다
+    const bonusPlatforms = Object.entries(best).filter(([p, v]) => !['instagram', 'threads'].includes(p) || v >= 50).length;
     return { keyword: e.keyword, category, platforms: [...e.platforms],
-      score: Math.round(base + 50 * (e.platforms.size - 1)), signals: e.signals };
+      score: Math.round(base + 50 * Math.max(0, bonusPlatforms - 1)), bonus: 50 * Math.max(0, bonusPlatforms - 1), signals: e.signals };
   }).sort((a, b) => b.score - a.score);
 }
 
@@ -488,7 +504,7 @@ function buildUnified({ trends, rising, shopping, youtube, tiktok }) {
 //  - day/<날짜>.html: 날짜별 트렌드 키워드 기록 (계속 쌓이는 롱테일 페이지)
 const SITE = 'https://keyword.8282ok.com';
 const SITE_NAME = '비투스의 키워드 세상';
-const PF = { google: '구글', naver: '네이버', youtube: '유튜브', tiktok: '틱톡' };
+const PF = { google: '구글', naver: '네이버', youtube: '유튜브', tiktok: '틱톡', instagram: '인스타', threads: '스레드' };
 const escH = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const fmtN = (n) => (n >= 10000 ? `${(n / 10000).toFixed(n >= 100000 ? 0 : 1)}만` : `${n}`);
 const korDate = (d) => { const [y, m, dd] = d.split('-').map(Number); return `${y}년 ${m}월 ${dd}일`; };
@@ -784,7 +800,7 @@ async function main() {
     if (newBlog) blog = { ...oldBlog, ...newBlog };
   } catch (e) { errors.blog = e.message; }
 
-  const unified = buildUnified({ trends, rising, shopping, youtube, tiktok });
+  let unified = buildUnified({ trends, rising, shopping, youtube, tiktok });
   let threads = null;
   prevThreadsInfo = existing?.threads || prev?.threads || null;
   // 공식 API에 결과가 있으면 그걸 쓰고(앱 심사 통과 후), 아니면 Apify로 하루 1번 받는다
@@ -824,6 +840,8 @@ async function main() {
       } catch (e) { errors.threadsApify = e.message; }
     }
   }
+  // 인스타·스레드 반응까지 넣어 통합 순위를 다시 계산한다 (측정 대상은 위 1차 순위의 상위 키워드)
+  unified = buildUnified({ trends, rising, shopping, youtube, tiktok, instagram, threads });
   const catOf = new Map(unified.map((u) => [norm(u.keyword), u.category]));
   const cat = (k) => catOf.get(norm(k)) || ruleCategory(k) || '기타';
   for (const t of trends) t.category = cat(t.keyword);
