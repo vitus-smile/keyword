@@ -320,12 +320,17 @@ async function threadsReaction(keywords) {
 
   const since = Math.floor(Date.now() / 1000) - 86400;
   const counts = {};
+  let fails = 0;
   for (const k of keywords) {
-    try {
-      const u = `https://graph.threads.net/v1.0/keyword_search?q=${encodeURIComponent(k)}&search_type=RECENT&since=${since}&limit=100&fields=id&access_token=${encodeURIComponent(token)}`;
-      const j = await (await get(u)).json();
-      counts[k] = (j.data || []).length;
-    } catch (e) { console.warn('threads', k, e.message); }
+    const u = `https://graph.threads.net/v1.0/keyword_search?q=${encodeURIComponent(k)}&search_type=RECENT&since=${since}&limit=100&fields=id&access_token=${encodeURIComponent(token)}`;
+    const res = await fetch(u);
+    const j = await res.json().catch(() => ({}));
+    if (res.ok) counts[k] = (j.data || []).length;
+    else {
+      // 권한 문제면 키워드마다 같은 오류라 처음 한 번만 보여주고 멈춘다
+      console.warn('threads', k, res.status, JSON.stringify(j.error || j).slice(0, 300));
+      if (++fails >= 3 && !Object.keys(counts).length) break;
+    }
     await sleep(300);
   }
   return { expiresAt, counts };
