@@ -379,6 +379,7 @@ function pageTiktok() {
 function pageThreads() {
   const th = data.threads;
   if (!th) return schedBar('threads') + empty('<b>스레드 토큰이 연결되지 않았어요.</b>');
+  if (th.error && !Object.keys(th.counts).length) return schedBar('threads') + empty(`<b>스레드 검색 권한을 준비 중이에요.</b> (${esc(th.error)})`);
   const units = (data.unified || []).filter((u) => th.counts[u.keyword] != null && matchQ(u.keyword))
     .sort((a, b) => th.counts[b.keyword] - th.counts[a.keyword]);
   const getCat = (u) => u.category;

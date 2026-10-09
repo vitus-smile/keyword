@@ -3,7 +3,7 @@
 // 키가 있으면 추가: 유튜브 인기 동영상(YOUTUBE_API_KEY), 네이버 데이터랩(NAVER_HUB_KEY_ID/KEY 또는 NAVER_CLIENT_ID/SECRET),
 //                  네이버 검색광고 키워드도구(NAVER_AD_API_KEY/SECRET/CUSTOMER_ID)
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import { createHmac } from 'node:crypto';
+import { createHmac, createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
@@ -307,20 +307,21 @@ async function tiktokTrending() {
 // ── 스레드 반응 (THREADS_ACCESS_TOKEN 필요) ──────────────────────
 // 스레드 키워드 검색은 좋아요 수를 주지 않아서, 최근 24시간 게시물 수(최대 100)로 반응을 잰다.
 // 하루 2,200번 한도 → 통합 상위 100개 × 하루 4번 = 400번
+let prevThreadsInfo = null;
 async function threadsReaction(keywords) {
   const token = env.THREADS_ACCESS_TOKEN;
   if (!token) return null;
-  // 장기 토큰(60일) 연장. 같은 토큰이면 만료일만 늘어나고, 새 토큰이 오면 Secret을 바꿔야 한다
-  let expiresAt = null;
-  try {
-    const r = await (await get(`https://graph.threads.net/refresh_access_token?grant_type=th_refresh_token&access_token=${encodeURIComponent(token)}`)).json();
-    if (r.expires_in) expiresAt = new Date(Date.now() + r.expires_in * 1000).toISOString();
-    if (r.access_token && r.access_token !== token) console.warn('⚠️ 스레드 토큰이 새로 발급됐어요. THREADS_ACCESS_TOKEN Secret을 바꿔야 합니다.');
-  } catch (e) { console.warn('스레드 토큰 연장 실패:', e.message); }
+  // 토큰 연장 API는 매번 '새' 토큰을 돌려줘서 Secret에 넣어 둔 토큰은 그대로 만료된다.
+  // 그래서 연장하지 않고, 이 토큰을 처음 본 날 + 60일을 만료일로 보여준다 (해시만 저장, 토큰은 저장 안 함)
+  const tokenHash = createHash('sha256').update(token).digest('hex').slice(0, 12);
+  const prevThreads = prevThreadsInfo;
+  const firstSeen = prevThreads?.tokenHash === tokenHash && prevThreads.tokenFirstSeen ? prevThreads.tokenFirstSeen : new Date().toISOString();
+  const expiresAt = new Date(new Date(firstSeen).getTime() + 60 * 86400e3).toISOString();
 
   const since = Math.floor(Date.now() / 1000) - 86400;
   const counts = {};
   let fails = 0;
+  let lastError = null;
   for (const k of keywords) {
     const u = `https://graph.threads.net/v1.0/keyword_search?q=${encodeURIComponent(k)}&search_type=RECENT&since=${since}&limit=100&fields=id&access_token=${encodeURIComponent(token)}`;
     const res = await fetch(u);
@@ -328,12 +329,13 @@ async function threadsReaction(keywords) {
     if (res.ok) counts[k] = (j.data || []).length;
     else {
       // 권한 문제면 키워드마다 같은 오류라 처음 한 번만 보여주고 멈춘다
+      lastError = j.error?.message || `HTTP ${res.status}`;
       console.warn('threads', k, res.status, JSON.stringify(j.error || j).slice(0, 300));
       if (++fails >= 3 && !Object.keys(counts).length) break;
     }
     await sleep(300);
   }
-  return { expiresAt, counts };
+  return { expiresAt, tokenHash, tokenFirstSeen: firstSeen, counts, error: Object.keys(counts).length ? null : lastError };
 }
 
 // ── 분야 분류 ───────────────────────────────────────────────────
@@ -711,6 +713,7 @@ async function main() {
 
   const unified = buildUnified({ trends, rising, shopping, youtube, tiktok });
   let threads = null;
+  prevThreadsInfo = existing?.threads || prev?.threads || null;
   try { threads = await threadsReaction(unified.slice(0, 100).map((u) => u.keyword)); if (threads) updated.threads = now; } catch (e) { errors.threads = e.message; }
   const catOf = new Map(unified.map((u) => [norm(u.keyword), u.category]));
   const cat = (k) => catOf.get(norm(k)) || ruleCategory(k) || '기타';
