@@ -605,7 +605,11 @@ function archivePage({ title, desc, path, crumbs, body }) {
 <meta property="og:locale" content="ko_KR">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="alternate" type="application/rss+xml" title="${SITE_NAME} 일별 트렌드" href="${SITE}/rss.xml">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌏</text></svg>">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-48.png" sizes="48x48" type="image/png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="manifest" href="/site.webmanifest">
+<meta name="theme-color" content="#5b5bf0">
 <script type="application/ld+json">${JSON.stringify(ld)}</script>
 <style>${ARCHIVE_CSS}</style>
 </head>
